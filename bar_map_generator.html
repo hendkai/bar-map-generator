@@ -1,0 +1,2747 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAR Map Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .control-group {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .control-group h3 {
+            margin-top: 0;
+            color: #ffd700;
+            border-bottom: 2px solid #ffd700;
+            padding-bottom: 10px;
+        }
+        
+        label {
+            display: block;
+            margin: 15px 0 5px 0;
+            font-weight: bold;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin: 5px 0;
+        }
+        
+        input[type="number"], select {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #ff6b6b, #ff8e53);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: transform 0.2s;
+            margin: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+        
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .canvas-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+        
+        .canvas-wrapper {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        canvas {
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            max-width: 100%;
+            height: auto;
+        }
+        
+        .canvas-wrapper h3 {
+            color: #ffd700;
+            margin-bottom: 15px;
+        }
+        
+        .info {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            border-left: 4px solid #ffd700;
+        }
+        
+        .download-section {
+            margin-top: 30px;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        .value-display {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 10px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Beyond All Reason Map Generator</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <h3>Karten-Grundlagen</h3>
+                <label>Kartengröße:
+                    <select id="mapSize">
+                        <option value="512">512x512 (Klein)</option>
+                        <option value="1024" selected>1024x1024 (Mittel)</option>
+                        <option value="2048">2048x2048 (Groß)</option>
+                    </select>
+                </label>
+                
+                <label>Terrain-Typ:
+                    <select id="terrainType">
+                        <option value="continental">Kontinental</option>
+                        <option value="islands">Inseln</option>
+                        <option value="canyon">Canyon</option>
+                        <option value="hills">Hügelig</option>
+                        <option value="flat">Flach</option>
+                    </select>
+                </label>
+                
+                <label>Anzahl Spieler:
+                    <select id="playerCount">
+                        <option value="2">2 Spieler</option>
+                        <option value="4" selected>4 Spieler</option>
+                        <option value="6">6 Spieler</option>
+                        <option value="8">8 Spieler</option>
+                    </select>
+                </label>
+            </div>
+            
+            <div class="control-group">
+                <h3>Gelände-Parameter</h3>
+                <label>Rauschstärke: <span class="value-display" id="noiseValue">0.5</span>
+                    <input type="range" id="noiseStrength" min="0.1" max="1.0" step="0.1" value="0.5">
+                </label>
+                
+                <label>Höhen-Variation: <span class="value-display" id="heightValue">128</span>
+                    <input type="range" id="heightVariation" min="50" max="255" step="5" value="128">
+                </label>
+                
+                <label>Wasserlevel: <span class="value-display" id="waterValue">64</span>
+                    <input type="range" id="waterLevel" min="0" max="128" step="4" value="64">
+                </label>
+                
+                <label>Glättungsgrad: <span class="value-display" id="smoothValue">2</span>
+                    <input type="range" id="smoothing" min="0" max="5" step="1" value="2">
+                </label>
+            </div>
+            
+            <div class="control-group">
+                <h3>Ressourcen</h3>
+                <label>Metal-Spots: <span class="value-display" id="metalValue">20</span>
+                    <input type="range" id="metalSpots" min="10" max="50" step="2" value="20">
+                </label>
+                
+                <label>Metal-Stärke: <span class="value-display" id="metalStrengthValue">2.0</span>
+                    <input type="range" id="metalStrength" min="1.0" max="5.0" step="0.1" value="2.0">
+                </label>
+                
+                <label>Geo-Spots: <span class="value-display" id="geoValue">4</span>
+                    <input type="range" id="geoSpots" min="2" max="12" step="1" value="4">
+                </label>
+            </div>
+        </div>
+        
+        <div class="button-container">
+            <button onclick="generateMap()">🎲 Map Generieren (nur Vorschau)</button>
+            <button onclick="randomizeSettings()">⚡ Zufällige Einstellungen</button>
+        </div>
+        
+        <div class="canvas-container">
+            <div class="canvas-wrapper">
+                <h3>Höhenkarte</h3>
+                <canvas id="heightmapCanvas" width="512" height="512"></canvas>
+            </div>
+            
+            <div class="canvas-wrapper">
+                <h3>Texturkarte</h3>
+                <canvas id="textureCanvas" width="512" height="512"></canvas>
+            </div>
+            
+            <div class="canvas-wrapper">
+                <h3>Ressourcenkarte</h3>
+                <canvas id="resourceCanvas" width="512" height="512"></canvas>
+            </div>
+        </div>
+        
+        <div class="download-section">
+            <h3>📥 Export für BAR</h3>
+            <button onclick="downloadCompleteMapPackage()">🎯 Vollständiges BAR Map-Paket herunterladen (.zip)</button>
+            <br>
+            <p style="margin: 15px 0; font-size: 14px; opacity: 0.8;">
+                Generiert alle Assets + automatisches Build-Script. Einfach das Script ausführen und fertig!
+            </p>
+            <hr style="margin: 20px 0; border: 1px solid rgba(255,255,255,0.2);">
+            <h4>Einzelne Dateien:</h4>
+            <button onclick="downloadHeightmap()">Höhenkarte (.png)</button>
+            <button onclick="downloadMetalmap()">Metalmap (.bmp)</button>
+            <button onclick="downloadTexture()">Texturkarte (.bmp)</button>
+            <button onclick="downloadNormalmap()">Normalmap (.png)</button>
+            <button onclick="downloadSpecularmap()">Specularmap (.png)</button>
+            <button onclick="downloadMinimap()">Minimap (.png)</button>
+            <button onclick="downloadConfig()">mapinfo.lua</button>
+        </div>
+        
+        <div class="info">
+            <h3>💡 Verwendungshinweise</h3>
+            <p><strong>1. Map generieren:</strong> Stelle die Parameter nach deinen Wünschen ein und klicke "Map Generieren".</p>
+            <p><strong>2. Komplettes Paket herunterladen:</strong> Klicke "Vollständiges BAR Map-Paket herunterladen".</p>
+            <p><strong>3. Build-Script ausführen:</strong> Entpacke das ZIP und führe das mitgelieferte Build-Script aus.</p>
+            <p><strong>4. Fertige Map installieren:</strong> Die generierte .sd7 Datei in deinen BAR maps Ordner kopieren.</p>
+            <p><strong>Benötigt:</strong> Python 3.x und Spring Map Tools (MapConv) - wird automatisch heruntergeladen falls nicht vorhanden.</p>
+        </div>
+    </div>
+
+    <script>
+        let heightmapData, textureData, resourceData;
+        let mapConfig = {};
+        
+        // Update value displays
+        function updateValueDisplays() {
+            document.getElementById('noiseValue').textContent = document.getElementById('noiseStrength').value;
+            document.getElementById('heightValue').textContent = document.getElementById('heightVariation').value;
+            document.getElementById('waterValue').textContent = document.getElementById('waterLevel').value;
+            document.getElementById('smoothValue').textContent = document.getElementById('smoothing').value;
+            document.getElementById('metalValue').textContent = document.getElementById('metalSpots').value;
+            document.getElementById('metalStrengthValue').textContent = document.getElementById('metalStrength').value;
+            document.getElementById('geoValue').textContent = document.getElementById('geoSpots').value;
+        }
+        
+        // Add event listeners for real-time updates
+        document.querySelectorAll('input[type="range"]').forEach(slider => {
+            slider.addEventListener('input', updateValueDisplays);
+        });
+        
+        // Initialize displays
+        updateValueDisplays();
+        
+        function generateMap() {
+            console.log("=== Generiere Map-Vorschau ===");
+            
+            const size = parseInt(document.getElementById('mapSize').value);
+            const terrainType = document.getElementById('terrainType').value;
+            const playerCount = parseInt(document.getElementById('playerCount').value);
+            const noiseStrength = parseFloat(document.getElementById('noiseStrength').value);
+            const heightVariation = parseInt(document.getElementById('heightVariation').value);
+            const waterLevel = parseInt(document.getElementById('waterLevel').value);
+            const smoothing = parseInt(document.getElementById('smoothing').value);
+            const metalSpots = parseInt(document.getElementById('metalSpots').value);
+            const metalStrength = parseFloat(document.getElementById('metalStrength').value);
+            const geoSpots = parseInt(document.getElementById('geoSpots').value);
+            
+            // Generate all data
+            heightmapData = generateHeightmap(size, terrainType, noiseStrength, heightVariation, waterLevel, smoothing);
+            textureData = generateTextureMap(size, heightmapData, waterLevel);
+            resourceData = generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount);
+            
+            mapConfig = {
+                size: size,
+                terrainType: terrainType,
+                playerCount: playerCount,
+                noiseStrength: noiseStrength,
+                heightVariation: heightVariation,
+                waterLevel: waterLevel,
+                metalSpots: metalSpots,
+                metalStrength: metalStrength,
+                geoSpots: geoSpots,
+                startPositions: generateStartPositions(size, playerCount, heightmapData, waterLevel)
+            };
+            
+            console.log("All data generated successfully");
+            
+            // Draw all previews - NO DOWNLOADS!
+            try {
+                drawHeightmap(heightmapData, size);
+                drawTextureMap(textureData, size);
+                drawResourceMap(resourceData, size, mapConfig.startPositions);
+                console.log("All maps drawn successfully");
+            } catch (error) {
+                console.error("Error drawing maps:", error);
+                alert("Fehler beim Zeichnen der Karten: " + error.message);
+            }
+        }
+        
+        function randomizeSettings() {
+            const terrainTypes = ['continental', 'islands', 'canyon', 'hills', 'flat'];
+            const playerCounts = [2, 4, 6, 8];
+            
+            document.getElementById('terrainType').value = terrainTypes[Math.floor(Math.random() * terrainTypes.length)];
+            document.getElementById('playerCount').value = playerCounts[Math.floor(Math.random() * playerCounts.length)];
+            document.getElementById('noiseStrength').value = (0.2 + Math.random() * 0.8).toFixed(1);
+            document.getElementById('heightVariation').value = Math.floor(80 + Math.random() * 175);
+            document.getElementById('waterLevel').value = Math.floor(Math.random() * 100);
+            document.getElementById('smoothing').value = Math.floor(Math.random() * 4);
+            document.getElementById('metalSpots').value = Math.floor(15 + Math.random() * 30);
+            document.getElementById('metalStrength').value = (1.5 + Math.random() * 3).toFixed(1);
+            document.getElementById('geoSpots').value = Math.floor(3 + Math.random() * 8);
+            
+            updateValueDisplays();
+        }
+        
+        function generateHeightmap(size, terrainType, noiseStrength, heightVariation, waterLevel, smoothing) {
+            const data = new Array(size * size);
+            
+            // Base terrain generation
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const index = y * size + x;
+                    let height = 0;
+                    
+                    switch (terrainType) {
+                        case 'continental':
+                            height = generateContinentalTerrain(x, y, size, noiseStrength);
+                            break;
+                        case 'islands':
+                            height = generateIslandTerrain(x, y, size, noiseStrength);
+                            break;
+                        case 'canyon':
+                            height = generateCanyonTerrain(x, y, size, noiseStrength);
+                            break;
+                        case 'hills':
+                            height = generateHillyTerrain(x, y, size, noiseStrength);
+                            break;
+                        case 'flat':
+                            height = generateFlatTerrain(x, y, size, noiseStrength);
+                            break;
+                    }
+                    
+                    data[index] = Math.max(0, Math.min(255, height * heightVariation));
+                }
+            }
+            
+            // Apply smoothing
+            for (let i = 0; i < smoothing; i++) {
+                smoothHeightmap(data, size);
+            }
+            
+            return data;
+        }
+        
+        function generateContinentalTerrain(x, y, size, noiseStrength) {
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
+            const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+            
+            const baseHeight = 1 - (dist / maxDist) * 0.7;
+            const noise = (noise2D(x * 0.01, y * 0.01) + noise2D(x * 0.005, y * 0.005) * 0.5) * noiseStrength;
+            
+            return Math.max(0, baseHeight + noise);
+        }
+        
+        function generateIslandTerrain(x, y, size, noiseStrength) {
+            const islands = [
+                { x: size * 0.3, y: size * 0.3, radius: size * 0.2 },
+                { x: size * 0.7, y: size * 0.7, radius: size * 0.2 },
+                { x: size * 0.2, y: size * 0.8, radius: size * 0.15 },
+                { x: size * 0.8, y: size * 0.2, radius: size * 0.15 }
+            ];
+            
+            let height = 0;
+            islands.forEach(island => {
+                const dist = Math.sqrt((x - island.x) ** 2 + (y - island.y) ** 2);
+                if (dist < island.radius) {
+                    height = Math.max(height, 1 - (dist / island.radius));
+                }
+            });
+            
+            const noise = noise2D(x * 0.01, y * 0.01) * noiseStrength;
+            return Math.max(0, height + noise);
+        }
+        
+        function generateCanyonTerrain(x, y, size, noiseStrength) {
+            const canyonCenter = size / 2;
+            const distFromCenter = Math.abs(y - canyonCenter) / (size / 2);
+            
+            let height = distFromCenter;
+            const noise = noise2D(x * 0.008, y * 0.008) * noiseStrength;
+            
+            return Math.max(0.1, height + noise);
+        }
+        
+        function generateHillyTerrain(x, y, size, noiseStrength) {
+            const noise1 = noise2D(x * 0.008, y * 0.008);
+            const noise2 = noise2D(x * 0.015, y * 0.015) * 0.5;
+            const noise3 = noise2D(x * 0.03, y * 0.03) * 0.25;
+            
+            return Math.max(0.2, (noise1 + noise2 + noise3) * noiseStrength + 0.3);
+        }
+        
+        function generateFlatTerrain(x, y, size, noiseStrength) {
+            const noise = noise2D(x * 0.02, y * 0.02) * noiseStrength * 0.3;
+            return 0.4 + noise;
+        }
+        
+        function noise2D(x, y) {
+            // Simple 2D noise function
+            const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+            return (n - Math.floor(n)) * 2 - 1;
+        }
+        
+        function smoothHeightmap(data, size) {
+            const newData = [...data];
+            for (let y = 1; y < size - 1; y++) {
+                for (let x = 1; x < size - 1; x++) {
+                    const index = y * size + x;
+                    let sum = 0;
+                    let count = 0;
+                    
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            sum += data[(y + dy) * size + (x + dx)];
+                            count++;
+                        }
+                    }
+                    
+                    newData[index] = sum / count;
+                }
+            }
+            
+            for (let i = 0; i < data.length; i++) {
+                data[i] = newData[i];
+            }
+        }
+        
+        function generateTextureMap(size, heightmapData, waterLevel) {
+            const textureData = new Array(size * size * 4); // RGBA
+            
+            for (let i = 0; i < size * size; i++) {
+                const height = heightmapData[i];
+                const index = i * 4;
+                
+                if (height < waterLevel) {
+                    // Water - blue
+                    textureData[index] = 30;      // R
+                    textureData[index + 1] = 100; // G
+                    textureData[index + 2] = 200; // B
+                } else if (height < waterLevel + 20) {
+                    // Beach/Sand - yellow
+                    textureData[index] = 255;     // R
+                    textureData[index + 1] = 230; // G
+                    textureData[index + 2] = 150; // B
+                } else if (height < waterLevel + 80) {
+                    // Grass - green
+                    textureData[index] = 50;      // R
+                    textureData[index + 1] = 150; // G
+                    textureData[index + 2] = 50;  // B
+                } else if (height < waterLevel + 120) {
+                    // Rock - gray
+                    textureData[index] = 120;     // R
+                    textureData[index + 1] = 120; // G
+                    textureData[index + 2] = 120; // B
+                } else {
+                    // Snow - white
+                    textureData[index] = 240;     // R
+                    textureData[index + 1] = 240; // G
+                    textureData[index + 2] = 255; // B
+                }
+                
+                textureData[index + 3] = 255; // Alpha
+            }
+            
+            return textureData;
+        }
+        
+        function generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount) {
+            const resourceData = {
+                metalSpots: [],
+                geoSpots: [],
+                size: size
+            };
+            
+            // Generate metal spots
+            for (let i = 0; i < metalSpots; i++) {
+                let attempts = 0;
+                let validSpot = false;
+                
+                while (!validSpot && attempts < 100) {
+                    const x = Math.floor(Math.random() * size);
+                    const y = Math.floor(Math.random() * size);
+                    const height = heightmapData[y * size + x];
+                    
+                    if (height > waterLevel + 10) {
+                        // Check distance from other metal spots
+                        let tooClose = false;
+                        for (const spot of resourceData.metalSpots) {
+                            const dist = Math.sqrt((x - spot.x) ** 2 + (y - spot.y) ** 2);
+                            if (dist < size * 0.05) {
+                                tooClose = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!tooClose) {
+                            resourceData.metalSpots.push({ x, y, value: 2.0 + Math.random() * 2.0 });
+                            validSpot = true;
+                        }
+                    }
+                    attempts++;
+                }
+            }
+            
+            // Generate geo spots
+            for (let i = 0; i < geoSpots; i++) {
+                let attempts = 0;
+                let validSpot = false;
+                
+                while (!validSpot && attempts < 100) {
+                    const x = Math.floor(Math.random() * size);
+                    const y = Math.floor(Math.random() * size);
+                    const height = heightmapData[y * size + x];
+                    
+                    if (height > waterLevel + 20) {
+                        // Check distance from other geo spots
+                        let tooClose = false;
+                        for (const spot of resourceData.geoSpots) {
+                            const dist = Math.sqrt((x - spot.x) ** 2 + (y - spot.y) ** 2);
+                            if (dist < size * 0.1) {
+                                tooClose = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!tooClose) {
+                            resourceData.geoSpots.push({ x, y, value: 250 + Math.random() * 250 });
+                            validSpot = true;
+                        }
+                    }
+                    attempts++;
+                }
+            }
+            
+            return resourceData;
+        }
+        
+        function generateStartPositions(size, playerCount, heightmapData, waterLevel) {
+            const positions = [];
+            const radius = size * 0.35;
+            const centerX = size / 2;
+            const centerY = size / 2;
+            
+            for (let i = 0; i < playerCount; i++) {
+                const angle = (i / playerCount) * 2 * Math.PI;
+                let x = Math.floor(centerX + Math.cos(angle) * radius);
+                let y = Math.floor(centerY + Math.sin(angle) * radius);
+                
+                // Ensure position is on land
+                let attempts = 0;
+                while (heightmapData[y * size + x] <= waterLevel && attempts < 50) {
+                    x = Math.floor(centerX + Math.cos(angle) * (radius + Math.random() * 50 - 25));
+                    y = Math.floor(centerY + Math.sin(angle) * (radius + Math.random() * 50 - 25));
+                    attempts++;
+                }
+                
+                positions.push({ x, y, team: i + 1 });
+            }
+            
+            return positions;
+        }
+        
+        // DRAWING FUNCTIONS - ONLY FOR PREVIEW, NO DOWNLOADS!
+        function drawHeightmap(data, size) {
+            const canvas = document.getElementById('heightmapCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 512;
+            
+            const imageData = ctx.createImageData(512, 512);
+            const scale = size / 512;
+            
+            for (let y = 0; y < 512; y++) {
+                for (let x = 0; x < 512; x++) {
+                    const sourceX = Math.floor(x * scale);
+                    const sourceY = Math.floor(y * scale);
+                    const height = data[sourceY * size + sourceX];
+                    const index = (y * 512 + x) * 4;
+                    
+                    imageData.data[index] = height;     // R
+                    imageData.data[index + 1] = height; // G
+                    imageData.data[index + 2] = height; // B
+                    imageData.data[index + 3] = 255;    // A
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            console.log("Heightmap drawn to canvas - NO DOWNLOAD");
+        }
+        
+        function drawTextureMap(data, size) {
+            const canvas = document.getElementById('textureCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 512;
+            
+            const imageData = ctx.createImageData(512, 512);
+            const scale = size / 512;
+            
+            for (let y = 0; y < 512; y++) {
+                for (let x = 0; x < 512; x++) {
+                    const sourceX = Math.floor(x * scale);
+                    const sourceY = Math.floor(y * scale);
+                    const sourceIndex = (sourceY * size + sourceX) * 4;
+                    const index = (y * 512 + x) * 4;
+                    
+                    imageData.data[index] = data[sourceIndex];         // R
+                    imageData.data[index + 1] = data[sourceIndex + 1]; // G
+                    imageData.data[index + 2] = data[sourceIndex + 2]; // B
+                    imageData.data[index + 3] = 255;                   // A
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            console.log("Texture map drawn to canvas - NO DOWNLOAD");
+        }
+        
+        function drawResourceMap(resourceData, size, startPositions) {
+            const canvas = document.getElementById('resourceCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 512;
+            
+            // Clear canvas with dark background
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, 512, 512);
+            
+            const scale = 512 / size;
+            
+            // Draw metal spots
+            ctx.fillStyle = '#ffdd00';
+            resourceData.metalSpots.forEach(spot => {
+                const x = spot.x * scale;
+                const y = spot.y * scale;
+                ctx.beginPath();
+                ctx.arc(x, y, 6, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            
+            // Draw geo spots
+            ctx.fillStyle = '#ff4444';
+            resourceData.geoSpots.forEach(spot => {
+                const x = spot.x * scale;
+                const y = spot.y * scale;
+                ctx.beginPath();
+                ctx.arc(x, y, 8, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            
+            // Draw start positions
+            ctx.fillStyle = '#44ff44';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            startPositions.forEach((pos, index) => {
+                const x = pos.x * scale;
+                const y = pos.y * scale;
+                ctx.beginPath();
+                ctx.arc(x, y, 12, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Draw player number
+                ctx.fillStyle = '#000000';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText((index + 1).toString(), x, y + 4);
+                ctx.fillStyle = '#44ff44';
+            });
+            
+            console.log("Resource map drawn to canvas - NO DOWNLOAD");
+        }
+        
+        // COMPLETE BAR MAP PACKAGE GENERATION
+        async function downloadCompleteMapPackage() {
+            if (!heightmapData) {
+                alert('Bitte erst eine Map generieren!');
+                return;
+            }
+            
+            const mapName = `generated_${mapConfig.terrainType}_${mapConfig.size}x${mapConfig.size}`;
+            console.log("Generating complete BAR map package:", mapName);
+            
+            try {
+                // Generate all BAR assets
+                const barAssets = generateBARAssets();
+                
+                // Generate build scripts
+                const buildScripts = generateBuildScripts(mapName);
+                
+                // Create ZIP file with complete self-compiling package
+                const zipBlob = await createCompleteMapPackage(barAssets, buildScripts, mapName);
+                
+                // Download
+                const url = URL.createObjectURL(zipBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${mapName}_complete_package.zip`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                console.log("Complete BAR map package generated successfully!");
+            } catch (error) {
+                console.error("Error generating BAR map package:", error);
+                alert("Fehler beim Generieren des BAR Map-Pakets: " + error.message);
+            }
+        }
+        
+        function generateBuildScripts(mapName) {
+            const pythonScript = generatePythonBuildScript(mapName);
+            const batchScript = generateBatchScript(mapName);
+            const bashScript = generateBashScript(mapName);
+            const requirements = generateRequirements();
+            const readme = generateDetailedReadme(mapName);
+            
+            return {
+                python: pythonScript,
+                batch: batchScript,
+                bash: bashScript,
+                requirements: requirements,
+                readme: readme
+            };
+        }
+        
+        function generatePythonBuildScript(mapName) {
+            return `#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+BAR Map Builder - Automatischer Map-Kompiler
+Generiert von BAR Map Generator v1.0
+
+Dieser Script kompiliert automatisch alle generierten Assets 
+in eine vollständige, spielbare BAR Map.
+"""
+
+import os
+import sys
+import subprocess
+import urllib.request
+import zipfile
+import shutil
+from pathlib import Path
+
+# Konfiguration
+MAP_NAME = "${mapName}"
+TOOLS_DIR = "tools"
+OUTPUT_DIR = "output"
+ASSETS_DIR = "assets"
+
+# PyMapConv URLs (Beherith's modern map compiler)
+PYMAPCONV_URLS = {
+    "windows": "https://github.com/Beherith/springrts_smf_compiler/releases/latest/download/pymapconv.exe",
+    "linux": "https://github.com/Beherith/springrts_smf_compiler/releases/download/v0.6.3/pymapconv.v0.6.3.linux-amd64.tar.gz"
+}
+
+def print_banner():
+    print("=" * 60)
+    print("🗺️  BAR Map Builder")
+    print("   Kompiliert: " + MAP_NAME)
+    print("=" * 60)
+
+def detect_os():
+    if sys.platform.startswith('win'):
+        return 'windows'
+    elif sys.platform.startswith('linux'):
+        return 'linux'
+    else:
+        print("❌ Unsupported OS:", sys.platform)
+        return None
+
+def download_tools(os_type):
+    """Download and extract PyMapConv"""
+    print("📥 Lade PyMapConv herunter...")
+    
+    if not os.path.exists(TOOLS_DIR):
+        os.makedirs(TOOLS_DIR)
+    
+    url = PYMAPCONV_URLS.get(os_type)
+    if not url:
+        print("❌ Keine Tools für dein OS verfügbar")
+        return False
+    
+    filename = url.split('/')[-1]
+    filepath = os.path.join(TOOLS_DIR, filename)
+    
+    try:
+        print(f"🔗 Downloade von: {url}")
+        urllib.request.urlretrieve(url, filepath)
+        print(f"✅ {filename} heruntergeladen")
+        
+        # Extract for Linux (release tarball) 
+        if filename.endswith('.tar.gz') and os_type == 'linux':
+            import tarfile
+            with tarfile.open(filepath, 'r:gz') as tar_ref:
+                tar_ref.extractall(TOOLS_DIR)
+            print("✅ PyMapConv Linux Release extrahiert")
+            
+            # Make executable
+            pymapconv_executable = os.path.join(TOOLS_DIR, "pymapconv")
+            if os.path.exists(pymapconv_executable):
+                os.chmod(pymapconv_executable, 0o755)
+                print("✅ PyMapConv ausführbar gemacht")
+            
+            # Install Linux dependencies
+            install_linux_dependencies()
+            
+        elif filename.endswith('.zip') and os_type == 'linux':
+            # Fallback to source if release not available
+            with zipfile.ZipFile(filepath, 'r') as zip_ref:
+                zip_ref.extractall(TOOLS_DIR)
+            print("✅ PyMapConv Quellcode extrahiert (Fallback)")
+            
+            # Install Python dependencies
+            requirements_path = os.path.join(TOOLS_DIR, "springrts_smf_compiler-master", "src", "requirements.txt")
+            if os.path.exists(requirements_path):
+                print("📦 Installiere Python-Abhängigkeiten...")
+                install_success = install_python_dependencies(requirements_path)
+                if not install_success:
+                    print("⚠️  Abhängigkeiten-Installation fehlgeschlagen")
+                    print("   Installiere manuell mit: pip install -r " + requirements_path)
+            else:
+                print("📦 Installiere Standard-Abhängigkeiten...")
+                install_success = install_standard_dependencies()
+                if not install_success:
+                    print("⚠️  Standard-Abhängigkeiten nicht installiert")
+                    
+            # Install Linux dependencies
+            install_linux_dependencies()
+            
+        elif os_type == 'windows':
+            print("✅ PyMapConv executable bereit")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Fehler beim Herunterladen: {e}")
+        print(f"   URL: {url}")
+        return False
+
+def install_python_dependencies(requirements_path):
+    """Install Python dependencies from requirements.txt"""
+    try:
+        print(f"📋 Lese Abhängigkeiten aus: {requirements_path}")
+        
+        # Try creating virtual environment first
+        venv_success = create_virtual_environment()
+        if venv_success:
+            pip_executable = os.path.join("venv", "bin", "pip")
+            if os.name == 'nt':  # Windows
+                pip_executable = os.path.join("venv", "Scripts", "pip.exe")
+        else:
+            pip_executable = sys.executable
+            pip_command = [pip_executable, "-m", "pip", "install", "-r", requirements_path]
+            
+            # Try with --break-system-packages flag if regular install fails
+            result = subprocess.run(pip_command, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0 and "externally-managed-environment" in result.stderr:
+                print("🔧 Verwende --break-system-packages flag...")
+                pip_command.append("--break-system-packages")
+                result = subprocess.run(pip_command, capture_output=True, text=True, timeout=300)
+        
+        if venv_success:
+            result = subprocess.run([pip_executable, "install", "-r", requirements_path], 
+                                  capture_output=True, text=True, timeout=300)
+        
+        if result.returncode == 0:
+            print("✅ Abhängigkeiten aus requirements.txt installiert")
+            return True
+        else:
+            print("❌ pip install fehlgeschlagen:")
+            print(result.stderr)
+            return False
+    except subprocess.TimeoutExpired:
+        print("❌ pip install Timeout")
+        return False
+    except Exception as e:
+        print(f"❌ Fehler bei pip install: {e}")
+        return False
+
+def create_virtual_environment():
+    """Create a virtual environment for Python dependencies"""
+    venv_path = "venv"
+    
+    if os.path.exists(venv_path):
+        print("📁 Virtuelle Umgebung bereits vorhanden")
+        return True
+    
+    try:
+        print("🔧 Erstelle virtuelle Python-Umgebung...")
+        result = subprocess.run([sys.executable, "-m", "venv", venv_path], 
+                              capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            print("✅ Virtuelle Umgebung erstellt")
+            return True
+        else:
+            print("❌ Virtuelle Umgebung konnte nicht erstellt werden:")
+            print(result.stderr)
+            return False
+    except Exception as e:
+        print(f"❌ Fehler beim Erstellen der virtuellen Umgebung: {e}")
+        return False
+
+def create_minimal_geovent(geovent_path):
+    """Create a minimal geovent.bmp file for PyMapConv"""
+    try:
+        from PIL import Image
+        # Create a simple 32x32 black image for geovent
+        img = Image.new('L', (32, 32), 0)  # Grayscale, black
+        img.save(geovent_path, 'BMP')
+        print(f"✅ Minimal geovent.bmp erstellt: {geovent_path}")
+    except Exception as e:
+        print(f"⚠️  Konnte geovent.bmp nicht erstellen: {e}")
+        # Create empty file as fallback
+        with open(geovent_path, 'w') as f:
+            f.write("")
+
+def fix_asset_formats():
+    """Fix asset file formats for PyMapConv compatibility"""
+    try:
+        from PIL import Image
+        
+        # Fix texture.bmp - remove alpha channel
+        texture_path = os.path.join(ASSETS_DIR, "texture.bmp")
+        if os.path.exists(texture_path):
+            print("   🔧 Korrigiere texture.bmp (entferne Alpha-Kanal)...")
+            img = Image.open(texture_path)
+            if img.mode in ('RGBA', 'LA'):
+                # Convert to RGB without alpha
+                rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'RGBA':
+                    rgb_img.paste(img, mask=img.split()[-1])  # Use alpha as mask
+                else:
+                    rgb_img.paste(img.convert('RGB'))
+                rgb_img.save(texture_path, 'BMP')
+                print("   ✅ Texture.bmp Alpha-Kanal entfernt")
+        
+        # Fix heightmap.bmp - ensure RGB format (PyMapConv needs RGB, not grayscale)
+        heightmap_path = os.path.join(ASSETS_DIR, "heightmap.bmp")
+        if os.path.exists(heightmap_path):
+            print("   🔧 Korrigiere heightmap.bmp (RGB-Format für PyMapConv)...")
+            img = Image.open(heightmap_path)
+            if img.mode != 'RGB':
+                # Convert to RGB - PyMapConv needs RGB channels
+                if img.mode == 'L':
+                    # Grayscale to RGB: copy grayscale value to all channels
+                    rgb_img = Image.new('RGB', img.size)
+                    pixels = list(img.getdata())
+                    rgb_pixels = [(p, p, p) for p in pixels]
+                    rgb_img.putdata(rgb_pixels)
+                elif img.mode == 'RGBA':
+                    # RGBA to RGB: blend with white background
+                    rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                    rgb_img.paste(img, mask=img.split()[-1])
+                else:
+                    rgb_img = img.convert('RGB')
+                rgb_img.save(heightmap_path, 'BMP')
+                print("   ✅ Heightmap.bmp zu RGB konvertiert (PyMapConv-kompatibel)")
+        
+        # Fix grassmap dimensions (must be 256x256 for 16x16 map units)
+        grassmap_path = os.path.join(ASSETS_DIR, "grassmap.bmp")
+        if os.path.exists(grassmap_path):
+            print("   🔧 Korrigiere grassmap.bmp (256x256 Größe)...")
+            img = Image.open(grassmap_path)
+            if img.size != (256, 256):
+                resized_img = img.resize((256, 256), Image.NEAREST)
+                # Remove alpha if present and ensure RGB format
+                if resized_img.mode in ('RGBA', 'LA'):
+                    rgb_img = Image.new('RGB', resized_img.size, (0, 0, 0))
+                    if resized_img.mode == 'RGBA':
+                        rgb_img.paste(resized_img, mask=resized_img.split()[-1])
+                    else:
+                        rgb_img = resized_img.convert('RGB')
+                    resized_img = rgb_img
+                elif resized_img.mode == 'L':
+                    # Convert grayscale to RGB
+                    resized_img = resized_img.convert('RGB')
+                resized_img.save(grassmap_path, 'BMP')
+                print("   ✅ Grassmap.bmp auf 256x256 skaliert und RGB-Format")
+        
+        # Fix typemap dimensions (must be 512x512 for 16x16 map units)
+        typemap_path = os.path.join(ASSETS_DIR, "typemap.bmp")
+        if os.path.exists(typemap_path):
+            print("   🔧 Korrigiere typemap.bmp (512x512 Größe)...")
+            img = Image.open(typemap_path)
+            if img.size != (512, 512):
+                resized_img = img.resize((512, 512), Image.NEAREST)
+                # Remove alpha if present
+                if resized_img.mode in ('RGBA', 'LA'):
+                    rgb_img = Image.new('RGB', resized_img.size, (0, 0, 0))
+                    if resized_img.mode == 'RGBA':
+                        rgb_img.paste(resized_img, mask=resized_img.split()[-1])
+                    else:
+                        rgb_img = resized_img.convert('RGB')
+                    resized_img = rgb_img
+                resized_img.save(typemap_path, 'BMP')
+                print("   ✅ Typemap.bmp auf 512x512 skaliert")
+        
+        # Fix metalmap dimensions (must be 512x512 for 16x16 map units)
+        metalmap_path = os.path.join(ASSETS_DIR, "metalmap.bmp")
+        if os.path.exists(metalmap_path):
+            print("   🔧 Korrigiere metalmap.bmp (512x512 Größe)...")
+            img = Image.open(metalmap_path)
+            if img.size != (512, 512):
+                resized_img = img.resize((512, 512), Image.NEAREST)
+                # Remove alpha if present and convert to grayscale
+                if resized_img.mode in ('RGBA', 'LA'):
+                    # For metalmap, use red channel only
+                    if resized_img.mode == 'RGBA':
+                        r, g, b, a = resized_img.split()
+                        resized_img = r  # Use red channel for metal values
+                    else:
+                        resized_img = resized_img.convert('L')
+                elif resized_img.mode == 'RGB':
+                    # Use red channel
+                    r, g, b = resized_img.split()
+                    resized_img = r
+                resized_img.save(metalmap_path, 'BMP')
+                print("   ✅ Metalmap.bmp auf 512x512 skaliert und zu Grayscale konvertiert")
+        
+        # Fix minimap - remove alpha channel  
+        minimap_path = os.path.join(ASSETS_DIR, "minimap.png")
+        if os.path.exists(minimap_path):
+            print("   🔧 Korrigiere minimap.png (entferne Alpha-Kanal)...")
+            img = Image.open(minimap_path)
+            if img.mode in ('RGBA', 'LA'):
+                # Convert to RGB without alpha
+                rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'RGBA':
+                    rgb_img.paste(img, mask=img.split()[-1])  # Use alpha as mask
+                else:
+                    rgb_img.paste(img.convert('RGB'))
+                rgb_img.save(minimap_path, 'PNG')
+                print("   ✅ Minimap.png Alpha-Kanal entfernt")
+        
+        print("✅ Asset-Formate korrigiert")
+        
+    except Exception as e:
+        print(f"⚠️  Asset-Format-Korrektur fehlgeschlagen: {e}")
+        print("   Verwende Original-Assets...")
+
+def install_linux_dependencies():
+    """Install Linux-specific dependencies for PyMapConv"""
+    print("🔧 Installiere Linux-Abhängigkeiten...")
+    
+    # Check for ImageMagick
+    try:
+        result = subprocess.run(["convert", "-version"], capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            print("✅ ImageMagick bereits verfügbar")
+        else:
+            print("⚠️  ImageMagick nicht gefunden - installiere mit deinem Package Manager:")
+            print("   Ubuntu/Debian: sudo apt install imagemagick")
+            print("   Arch/Manjaro: sudo pacman -S imagemagick") 
+            print("   Fedora: sudo dnf install ImageMagick")
+    except:
+        print("⚠️  ImageMagick nicht verfügbar - wird für Texture-Konvertierung benötigt")
+    
+    # Try to install CompressonatorCLI
+    install_compressonator()
+
+def install_compressonator():
+    """Install CompressonatorCLI if needed"""
+    try:
+        # Check if CompressonatorCLI is already available
+        result = subprocess.run(["CompressonatorCLI", "--help"], 
+                              capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            print("✅ CompressonatorCLI bereits verfügbar")
+            return True
+    except:
+        pass
+    
+    print("📥 Versuche CompressonatorCLI Installation...")
+    
+    # Try AppImage version first (more universal)
+    appimage_url = "https://github.com/GPUOpen-Tools/compressonator/releases/download/V4.4.13/compressonator-4.4.13-x86_64.AppImage"
+    
+    try:
+        filename = "compressonator.AppImage"
+        filepath = os.path.join(TOOLS_DIR, filename)
+        
+        urllib.request.urlretrieve(appimage_url, filepath)
+        print("✅ CompressonatorCLI AppImage heruntergeladen")
+        
+        # Make executable
+        os.chmod(filepath, 0o755)
+        
+        # Test if it works
+        result = subprocess.run([filepath, "--help"], capture_output=True, text=True, timeout=15)
+        if result.returncode == 0:
+            print("✅ CompressonatorCLI AppImage funktioniert")
+            return True
+        else:
+            print("⚠️  CompressonatorCLI AppImage Test fehlgeschlagen")
+            return False
+            
+    except Exception as e:
+        print(f"⚠️  CompressonatorCLI Installation fehlgeschlagen: {e}")
+        print("   PyMapConv wird ohne Texture-Kompression fortfahren")
+        print("   Installiere manuell: https://github.com/GPUOpen-Tools/compressonator")
+        return False
+
+def install_standard_dependencies():
+    """Install known PyMapConv dependencies manually"""
+    dependencies = [
+        "pypng",        # png module
+        "Pillow",       # PIL/Image processing
+        "numpy",        # numerical operations
+        "gooey",        # GUI framework
+    ]
+    
+    print(f"📦 Installiere bekannte Abhängigkeiten: {', '.join(dependencies)}")
+    
+    # Try creating virtual environment first
+    venv_success = create_virtual_environment()
+    if venv_success:
+        pip_executable = os.path.join("venv", "bin", "pip")
+        if os.name == 'nt':  # Windows
+            pip_executable = os.path.join("venv", "Scripts", "pip.exe")
+    else:
+        pip_executable = sys.executable
+    
+    all_success = True
+    for dep in dependencies:
+        try:
+            print(f"   📥 Installiere {dep}...")
+            
+            if venv_success:
+                cmd = [pip_executable, "install", dep]
+            else:
+                cmd = [pip_executable, "-m", "pip", "install", dep]
+                
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            
+            # Try with --break-system-packages if needed
+            if result.returncode != 0 and "externally-managed-environment" in result.stderr and not venv_success:
+                print(f"   🔧 Verwende --break-system-packages für {dep}...")
+                cmd.append("--break-system-packages")
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            
+            if result.returncode == 0:
+                print(f"   ✅ {dep} installiert")
+            else:
+                print(f"   ❌ {dep} Installation fehlgeschlagen: {result.stderr}")
+                all_success = False
+        except Exception as e:
+            print(f"   ❌ Fehler bei {dep}: {e}")
+            all_success = False
+    
+    if all_success:
+        print("✅ Alle Standard-Abhängigkeiten installiert")
+    else:
+        print("⚠️  Einige Abhängigkeiten konnten nicht installiert werden")
+    
+    return all_success
+
+def find_pymapconv():
+    """Find PyMapConv executable or script"""
+    possible_paths = [
+        # Windows executable
+        os.path.join(TOOLS_DIR, "pymapconv.exe"),
+        # Linux release executable
+        os.path.join(TOOLS_DIR, "pymapconv"),
+        # Linux Python script (fallback)
+        os.path.join(TOOLS_DIR, "springrts_smf_compiler-master", "src", "pymapconv.py"),
+        # Alternative paths
+        os.path.join(TOOLS_DIR, "src", "pymapconv.py"),
+        os.path.join(TOOLS_DIR, "pymapconv.py"),
+    ]
+    
+    # Recursively search in tools directory
+    for root, dirs, files in os.walk(TOOLS_DIR):
+        for file in files:
+            if file.lower() in ['pymapconv.exe', 'pymapconv.py', 'pymapconv']:
+                possible_paths.append(os.path.join(root, file))
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    return None
+
+def run_pymapconv(pymapconv_path):
+    """Run PyMapConv to compile the map"""
+    print("🔨 Kompiliere Map mit PyMapConv...")
+    
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+    
+    # Create temp directories that PyMapConv needs with proper permissions
+    temp_dirs = ["temp", "temp/thread0", "temp/thread1", "temp/thread2", "temp/thread3"]
+    for temp_dir in temp_dirs:
+        if os.path.exists(temp_dir):
+            # Clean existing temp directory
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        
+        os.makedirs(temp_dir, mode=0o755)
+        print(f"📁 Erstellt: {temp_dir}")
+        # Ensure directory is writable
+        os.chmod(temp_dir, 0o755)
+        
+        # Test write access and create dummy files to prevent FileNotFoundError
+        test_file = os.path.join(temp_dir, "test.tmp")
+        try:
+            with open(test_file, 'w') as f:
+                f.write("test")
+            os.remove(test_file)
+            print(f"✅ Schreibzugriff bestätigt: {temp_dir}")
+            
+            # Pre-create some dummy files to prevent PyMapConv FileNotFoundError
+            for i in range(10):
+                dummy_file = os.path.join(temp_dir, f"temp{i}.BMP")
+                dummy_file2 = os.path.join(temp_dir, f"temp{i}.TIFF")
+                try:
+                    with open(dummy_file, 'w') as f:
+                        f.write("")
+                    with open(dummy_file2, 'w') as f:
+                        f.write("")
+                except:
+                    pass
+                    
+        except Exception as e:
+            print(f"⚠️  Schreibzugriff-Problem in {temp_dir}: {e}")
+    
+    # Fix asset files before compilation
+    print("🔧 Korrigiere Asset-Formate...")
+    fix_asset_formats()
+    
+    # Create minimal geovent.bmp if it doesn't exist
+    resources_dir = "resources"
+    if not os.path.exists(resources_dir):
+        os.makedirs(resources_dir, mode=0o755)
+    
+    geovent_path = os.path.join(resources_dir, "geovent.bmp")
+    if not os.path.exists(geovent_path):
+        create_minimal_geovent(geovent_path)
+    
+    # Determine if we're using executable or Python script
+    is_python_script = pymapconv_path.endswith('.py')
+    is_executable = pymapconv_path.endswith(('pymapconv.exe', 'pymapconv'))
+    
+    # PyMapConv command - uses GUI mode with batch file input
+    output_path = os.path.join(OUTPUT_DIR, MAP_NAME + ".sd7")
+    
+    if is_python_script:
+        # Check if virtual environment exists
+        venv_python = os.path.join("venv", "bin", "python")
+        if os.name == 'nt':  # Windows
+            venv_python = os.path.join("venv", "Scripts", "python.exe")
+        
+        if os.path.exists(venv_python):
+            python_executable = venv_python
+            print("🐍 Verwende virtuelle Umgebung")
+        else:
+            python_executable = sys.executable
+            print("🐍 Verwende System-Python")
+        
+        # Python script mode - using correct PyMapConv parameters with proper file formats
+        cmd = [
+            python_executable, pymapconv_path,
+            "-a", os.path.join(ASSETS_DIR, "heightmap.bmp"),  # -a HEIGHTMAP (BMP, 8-bit acceptable)
+            "-m", os.path.join(ASSETS_DIR, "metalmap.bmp"),   # -m METALMAP (BMP format)
+            "-t", os.path.join(ASSETS_DIR, "texture.bmp"),    # -t INTEX (BMP format)
+            "-l", os.path.join(ASSETS_DIR, "normalmap.png"),  # -l MAPNORMALS (PNG is ok)
+            "-z", os.path.join(ASSETS_DIR, "specularmap.png"), # -z SPECULAR (PNG is ok)
+            "-p", os.path.join(ASSETS_DIR, "minimap.png"),    # -p MINIMAP (PNG is ok)
+            "-r", os.path.join(ASSETS_DIR, "grassmap.bmp"),   # -r GRASSMAP (BMP format)
+            "-y", os.path.join(ASSETS_DIR, "typemap.bmp"),    # -y TYPEMAP (BMP format)
+            "-o", output_path                                 # -o OUTFILE
+        ]
+    elif is_executable:
+        # Linux/Windows executable mode - using correct PyMapConv parameters with proper file formats
+        cmd = [
+            pymapconv_path,
+            "-a", os.path.join(ASSETS_DIR, "heightmap.bmp"),  # -a HEIGHTMAP (BMP, RGB format)
+            "-m", os.path.join(ASSETS_DIR, "metalmap.bmp"),   # -m METALMAP (BMP format)
+            "-t", os.path.join(ASSETS_DIR, "texture.bmp"),    # -t INTEX (BMP format)
+            "-l", os.path.join(ASSETS_DIR, "normalmap.png"),  # -l MAPNORMALS (PNG is ok)
+            "-z", os.path.join(ASSETS_DIR, "specularmap.png"), # -z SPECULAR (PNG is ok)
+            "-p", os.path.join(ASSETS_DIR, "minimap.png"),    # -p MINIMAP (PNG is ok)
+            "-r", os.path.join(ASSETS_DIR, "grassmap.bmp"),   # -r GRASSMAP (BMP format)
+            "-y", os.path.join(ASSETS_DIR, "typemap.bmp"),    # -y TYPEMAP (BMP format)
+            "--numthreads", "1",                              # Single thread to avoid temp file issues
+            "-o", output_path                                 # -o OUTFILE
+        ]
+    else:
+        # Unknown format - try as executable
+        print("⚠️  Unbekanntes PyMapConv-Format, versuche als Executable...")
+        cmd = [
+            pymapconv_path,
+            "-a", os.path.join(ASSETS_DIR, "heightmap.bmp"),
+            "-m", os.path.join(ASSETS_DIR, "metalmap.bmp"),
+            "-t", os.path.join(ASSETS_DIR, "texture.bmp"),
+            "-o", output_path
+        ]
+    
+    try:
+        print(f"🔧 Kommando: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if result.returncode == 0:
+            print("✅ Map erfolgreich kompiliert!")
+            if os.path.exists(output_path):
+                print(f"📁 Output: {output_path}")
+                return True
+            else:
+                print("⚠️  PyMapConv erfolgreich, aber Ausgabedatei nicht gefunden")
+                return False
+        else:
+            print("❌ PyMapConv Fehler:")
+            print("STDOUT:", result.stdout)
+            print("STDERR:", result.stderr)
+            
+            # Try alternative approach - Python script if executable failed
+            print("🔄 Versuche Python-Script als Alternative...")
+            python_script_path = find_python_pymapconv()
+            if python_script_path:
+                print(f"📍 Gefunden: {python_script_path}")
+                return run_pymapconv_python(python_script_path)
+            else:
+                print("🔄 Lade Python-Version von PyMapConv als Fallback...")
+                if download_python_pymapconv():
+                    python_script_path = find_python_pymapconv()
+                    if python_script_path:
+                        print(f"📍 Python-Script gefunden: {python_script_path}")
+                        return run_pymapconv_python(python_script_path)
+                
+                print("🔄 Versuche vereinfachte Methode...")
+                return run_pymapconv_simple(pymapconv_path)
+            
+    except subprocess.TimeoutExpired:
+        print("❌ PyMapConv Timeout - Prozess dauerte zu lange")
+        return False
+    except Exception as e:
+        print(f"❌ Fehler beim Ausführen von PyMapConv: {e}")
+        return False
+
+def download_python_pymapconv():
+    """Download Python version of PyMapConv as fallback"""
+    try:
+        print("📥 Lade PyMapConv Python-Version herunter...")
+        url = "https://github.com/Beherith/springrts_smf_compiler/archive/refs/heads/master.zip"
+        filename = "pymapconv_python.zip"
+        filepath = os.path.join(TOOLS_DIR, filename)
+        
+        urllib.request.urlretrieve(url, filepath)
+        print("✅ PyMapConv Python-Version heruntergeladen")
+        
+        # Extract
+        with zipfile.ZipFile(filepath, 'r') as zip_ref:
+            zip_ref.extractall(TOOLS_DIR)
+        print("✅ PyMapConv Python-Quellcode extrahiert")
+        
+        # Install dependencies
+        requirements_path = os.path.join(TOOLS_DIR, "springrts_smf_compiler-master", "src", "requirements.txt")
+        if os.path.exists(requirements_path):
+            print("📦 Installiere Python-Abhängigkeiten...")
+            install_python_dependencies(requirements_path)
+        else:
+            print("📦 Installiere Standard-Abhängigkeiten...")
+            install_standard_dependencies()
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Fehler beim Herunterladen der Python-Version: {e}")
+        return False
+
+def find_python_pymapconv():
+    """Find Python PyMapConv script as fallback"""
+    possible_paths = [
+        os.path.join(TOOLS_DIR, "springrts_smf_compiler-master", "src", "pymapconv.py"),
+        os.path.join(TOOLS_DIR, "src", "pymapconv.py"),
+        os.path.join(TOOLS_DIR, "pymapconv.py"),
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    return None
+
+def run_pymapconv_python(pymapconv_path):
+    """Run PyMapConv using Python script with virtual environment"""
+    print("🐍 Verwende PyMapConv Python-Script...")
+    
+    # Use virtual environment if available
+    venv_python = os.path.join("venv", "bin", "python")
+    if os.name == 'nt':  # Windows
+        venv_python = os.path.join("venv", "Scripts", "python.exe")
+    
+    if os.path.exists(venv_python):
+        python_executable = venv_python
+        print("🐍 Verwende virtuelle Umgebung")
+    else:
+        python_executable = sys.executable
+        print("🐍 Verwende System-Python")
+    
+    output_path = os.path.join(OUTPUT_DIR, MAP_NAME + ".sd7")
+    
+    cmd = [
+        python_executable, pymapconv_path,
+        "-a", os.path.join(ASSETS_DIR, "heightmap.bmp"),  # heightmap
+        "-m", os.path.join(ASSETS_DIR, "metalmap.bmp"),   # metalmap
+        "-t", os.path.join(ASSETS_DIR, "texture.bmp"),    # texture
+        "-l", os.path.join(ASSETS_DIR, "normalmap.png"),  # normalmap
+        "-z", os.path.join(ASSETS_DIR, "specularmap.png"), # specular
+        "-p", os.path.join(ASSETS_DIR, "minimap.png"),    # minimap
+        "-r", os.path.join(ASSETS_DIR, "grassmap.bmp"),   # grassmap
+        "-y", os.path.join(ASSETS_DIR, "typemap.bmp"),    # typemap
+        "--numthreads", "1",                              # Single thread to avoid temp file issues
+        "-o", output_path                                 # output
+    ]
+    
+    try:
+        print(f"🔧 Python-Kommando: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if os.path.exists(output_path):
+            print("✅ Map erfolgreich mit Python-Script kompiliert!")
+            print(f"📁 Output: {output_path}")
+            return True
+        else:
+            print("❌ Python-Script Kompilierung fehlgeschlagen")
+            print("STDOUT:", result.stdout[-1000:])  # Last 1000 chars
+            print("STDERR:", result.stderr[-500:])   # Last 500 chars
+            return False
+            
+    except Exception as e:
+        print(f"❌ Python-Script Fehler: {e}")
+        return False
+
+def run_pymapconv_simple(pymapconv_path):
+    """Alternative method using PyMapConv with minimal parameters and skip texture"""
+    print("🔄 Versuche vereinfachte PyMapConv-Kompilierung (ohne Texturen)...")
+    
+    # Check if virtual environment exists
+    is_python_script = pymapconv_path.endswith('.py')
+    if is_python_script:
+        venv_python = os.path.join("venv", "bin", "python")
+        if os.name == 'nt':  # Windows
+            venv_python = os.path.join("venv", "Scripts", "python.exe")
+        
+        if os.path.exists(venv_python):
+            python_executable = venv_python
+        else:
+            python_executable = sys.executable
+    
+    output_path = os.path.join(OUTPUT_DIR, MAP_NAME + ".sd7")
+    
+    # Try with only essential parameters and skip texture processing
+    if is_python_script:
+        cmd = [
+            python_executable, pymapconv_path,
+            "-a", os.path.join(ASSETS_DIR, "heightmap.bmp"),  # heightmap is essential (BMP, 8-bit acceptable)
+            "-m", os.path.join(ASSETS_DIR, "metalmap.bmp"),   # metalmap is essential (BMP format)
+            "-s",                                             # skip texture processing
+            "-o", output_path                                 # output path
+        ]
+    else:
+        cmd = [
+            pymapconv_path,
+            "-a", os.path.join(ASSETS_DIR, "heightmap.bmp"),
+            "-m", os.path.join(ASSETS_DIR, "metalmap.bmp"),
+            "-s",                                             # skip texture processing
+            "-o", output_path
+        ]
+    
+    try:
+        print(f"🔧 Vereinfachtes Kommando: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if os.path.exists(output_path):
+            print("✅ Map erfolgreich kompiliert (vereinfachte Methode)!")
+            print(f"📁 Output: {output_path}")
+            return True
+        else:
+            print("❌ Vereinfachte PyMapConv-Methode fehlgeschlagen")
+            print("STDOUT:", result.stdout)  
+            print("STDERR:", result.stderr)
+            return False
+            
+    except Exception as e:
+        print(f"❌ Vereinfachte Methode fehlgeschlagen: {e}")
+        return False
+
+def install_map():
+    """Copy compiled map to BAR directory"""
+    print("📥 Installiere Map in BAR...")
+    
+    map_file = os.path.join(OUTPUT_DIR, MAP_NAME + ".sd7")
+    if not os.path.exists(map_file):
+        print("❌ Kompilierte Map nicht gefunden!")
+        return False
+    
+    # BAR map directories
+    bar_dirs = [
+        os.path.expanduser("~/.var/app/info.beyondallreason.bar/data/maps/"),  # Flatpak
+        os.path.expanduser("~/.spring/maps/"),  # Native Linux
+        os.path.expanduser("~/Documents/My Games/Spring/maps/"),  # Windows
+        os.path.expanduser("~/AppData/Local/Spring/maps/"),  # Windows alternative
+    ]
+    
+    installed = False
+    for bar_dir in bar_dirs:
+        if os.path.exists(bar_dir):
+            try:
+                shutil.copy2(map_file, bar_dir)
+                print(f"✅ Map installiert in: {bar_dir}")
+                installed = True
+                break
+            except Exception as e:
+                print(f"⚠️  Installation in {bar_dir} fehlgeschlagen: {e}")
+    
+    if not installed:
+        print("⚠️  Automatische Installation fehlgeschlagen.")
+        print(f"🔧 Kopiere manuell: {map_file}")
+        print("   nach deinen BAR maps Ordner")
+    
+    return installed
+
+def main():
+    print_banner()
+    
+    # Check if assets exist
+    if not os.path.exists(ASSETS_DIR):
+        print("❌ Assets Ordner nicht gefunden!")
+        print("   Stelle sicher, dass du das komplette Paket extrahiert hast.")
+        return 1
+    
+    # Detect OS
+    os_type = detect_os()
+    if not os_type:
+        return 1
+    
+    # Check for existing PyMapConv
+    pymapconv_path = find_pymapconv()
+    
+    # Download tools if not found
+    if not pymapconv_path:
+        print("🔍 PyMapConv nicht gefunden, lade Tools herunter...")
+        if not download_tools(os_type):
+            return 1
+        pymapconv_path = find_pymapconv()
+    
+    if not pymapconv_path:
+        print("❌ PyMapConv konnte nicht gefunden werden!")
+        print("   Besuche: https://github.com/Beherith/springrts_smf_compiler")
+        return 1
+    
+    print(f"✅ PyMapConv gefunden: {pymapconv_path}")
+    
+    # Make executable on Linux
+    if os_type == 'linux' and pymapconv_path.endswith('.py'):
+        os.chmod(pymapconv_path, 0o755)
+    
+    # Install CompressonatorCLI for texture compression
+    if os_type == 'linux':
+        print("🔧 Prüfe CompressonatorCLI...")
+        install_compressonator()
+    
+    # Compile map
+    if not run_pymapconv(pymapconv_path):
+        print("\\n❌ PyMapConv Kompilierung fehlgeschlagen!")
+        print("\\n🔧 Mögliche Lösungen:")
+        print("   1. PyMapConv GUI manuell verwenden:")
+        print(f"      cd {os.getcwd()}")
+        print(f"      source venv/bin/activate")
+        print(f"      python3 {pymapconv_path}")
+        print("      → Dann: Heightmap=assets/heightmap.bmp, Metalmap=assets/metalmap.bmp")
+        print("   2. Installiere Abhängigkeiten manuell:")
+        print(f"      pip install pypng Pillow numpy gooey")
+        print("   3. Besuche: https://github.com/Beherith/springrts_smf_compiler")
+        print("\\n📁 Deine Assets sind bereit in: assets/")
+        print("📄 Map-Konfiguration: mapinfo.lua")
+        print("\\n💡 Tipp: PyMapConv hat eine GUI - das könnte einfacher sein!")
+        return 1
+    
+    # Install map
+    install_map()
+    
+    print("\\n🎉 Map-Generation abgeschlossen!")
+    print(f"   Map Name: {MAP_NAME}")
+    print(f"   Datei: {os.path.join(OUTPUT_DIR, MAP_NAME + '.sd7')}")
+    print("\\n🎮 Starte BAR und wähle deine neue Map aus!")
+    
+    return 0
+
+if __name__ == "__main__":
+    try:
+        exit_code = main()
+        sys.exit(exit_code)
+    except KeyboardInterrupt:
+        print("\\n❌ Abgebrochen durch Benutzer")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\\n❌ Unerwarteter Fehler: {e}")
+        sys.exit(1)
+`;
+        }
+        
+        function generateBatchScript(mapName) {
+            return `@echo off
+REM BAR Map Builder - Windows Batch Script
+REM Generiert von BAR Map Generator v1.0
+
+echo ============================================================
+echo 🗺️  BAR Map Builder für Windows
+echo    Kompiliert: ${mapName}
+echo ============================================================
+
+REM Check if Python is available
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ❌ Python nicht gefunden!
+    echo    Installiere Python 3.x von https://python.org
+    pause
+    exit /b 1
+)
+
+REM Run Python build script
+echo 🚀 Starte Python Build Script...
+python build_map.py
+
+if %errorlevel% equ 0 (
+    echo.
+    echo 🎉 Build erfolgreich!
+    echo 📁 Kompilierte Map: output\\${mapName}.sd7
+) else (
+    echo.
+    echo ❌ Build fehlgeschlagen!
+)
+
+echo.
+echo Drücke eine Taste zum Beenden...
+pause >nul
+`;
+        }
+        
+        function generateBashScript(mapName) {
+            return `#!/bin/bash
+# BAR Map Builder - Linux/macOS Bash Script  
+# Generiert von BAR Map Generator v1.0
+
+echo "============================================================"
+echo "🗺️  BAR Map Builder für Linux/macOS"
+echo "   Kompiliert: ${mapName}"
+echo "============================================================"
+
+# Check if Python is available
+if ! command -v python3 &> /dev/null; then
+    echo "❌ Python 3 nicht gefunden!"
+    echo "   Installiere Python 3.x über deinen Package Manager"
+    exit 1
+fi
+
+# Make script executable
+chmod +x build_map.py
+
+# Run Python build script
+echo "🚀 Starte Python Build Script..."
+python3 build_map.py
+
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "🎉 Build erfolgreich!"
+    echo "📁 Kompilierte Map: output/${mapName}.sd7"
+else
+    echo ""
+    echo "❌ Build fehlgeschlagen!"
+fi
+
+echo ""
+echo "✨ Fertig! Drücke Enter zum Beenden..."
+read
+`;
+        }
+        
+        function generateRequirements() {
+            return `# BAR Map Builder - Python Requirements
+# Generiert von BAR Map Generator v1.0
+
+# Basis-Bibliotheken (sollten mit Python Standard-Installation verfügbar sein)
+# urllib.request - für Downloads
+# zipfile - für ZIP-Verarbeitung  
+# subprocess - für externe Tools
+# pathlib - für Dateipfade
+
+# Keine zusätzlichen Abhängigkeiten erforderlich!
+# Dieses Script verwendet nur Python Standard-Bibliotheken.
+
+# Falls du zusätzliche Features willst, könntest du installieren:
+# Pillow>=9.0.0  # für erweiterte Bildverarbeitung
+# requests>=2.25.0  # für bessere HTTP-Requests
+`;
+        }
+        
+        function generateDetailedReadme(mapName) {
+            return `# BAR Map Builder - ${mapName}
+
+Automatischer Map-Kompiler für Beyond All Reason (BAR)
+Generiert von **BAR Map Generator v1.0**
+
+## 📋 Inhalt des Pakets
+
+\`\`\`
+${mapName}_complete_package/
+├── 📁 assets/              # Alle generierten Map-Assets
+│   ├── heightmap.png       # Höhenkarte (16-bit)
+│   ├── metalmap.png        # Metallvorkommen
+│   ├── texture.png         # Oberflächentextur
+│   ├── normalmap.png       # Normalmap für Details
+│   ├── specularmap.png     # Spiegelung/Glanz
+│   ├── minimap.png         # Minimap (1024x1024)
+│   ├── grassmap.png        # Grasdichte
+│   ├── typemap.png         # Geländetypen
+│   └── splatmap.png        # Detail-Textur-Mapping
+├── 📄 mapinfo.lua          # Map-Konfiguration
+├── 🐍 build_map.py         # Haupt-Build-Script (Python)
+├── 🔧 build.bat            # Windows Build Script
+├── 🔧 build.sh             # Linux/macOS Build Script
+└── 📖 README.md            # Diese Datei
+\`\`\`
+
+## 🚀 Schnellstart
+
+### Windows:
+1. Doppelklick auf \`build.bat\`
+2. Warten bis "Build erfolgreich!" erscheint
+3. Fertige MAP findest du im \`output/\` Ordner
+
+### Linux/macOS:
+1. Terminal öffnen in diesem Ordner
+2. \`./build.sh\` ausführen (oder \`bash build.sh\`)
+3. Fertige Map findest du im \`output/\` Ordner
+
+### Manuell (alle Systeme):
+\`\`\`bash
+python3 build_map.py
+\`\`\`
+
+## 📋 Voraussetzungen
+
+- **Python 3.6+** (https://python.org)
+- **Internet-Verbindung** (für Download der Spring Map Tools)
+- **~500MB freier Speicher** (für Tools und temporäre Dateien)
+
+Das Script lädt automatisch die benötigten Spring Map Tools herunter!
+
+## 🎯 Was passiert beim Build?
+
+1. **Tool-Check**: Prüft ob Spring Map Tools vorhanden sind
+2. **Download**: Lädt MapConv automatisch herunter falls nötig
+3. **Kompilierung**: Konvertiert alle PNG/BMP Assets in Spring-Format
+4. **Packaging**: Erstellt die finale \`.sd7\` Map-Datei
+5. **Installation**: Kopiert die Map automatisch in deinen BAR-Ordner
+
+## 📁 BAR Map-Ordner
+
+Die fertige Map wird automatisch installiert in:
+
+### Linux (Flatpak):
+\`~/.var/app/info.beyondallreason.bar/data/maps/\`
+
+### Linux (Native):
+\`~/.spring/maps/\`
+
+### Windows:
+\`~/Documents/My Games/Spring/maps/\`
+
+## 🎮 Map Details
+
+- **Name**: ${mapName}
+- **Größe**: ${mapConfig.size}x${mapConfig.size} (${mapConfig.size/64}x${mapConfig.size/64} Spring-Einheiten)
+- **Terrain**: ${mapConfig.terrainType}
+- **Spieler**: ${mapConfig.playerCount}
+- **Metal-Spots**: ${mapConfig.metalSpots}
+- **Geo-Spots**: ${mapConfig.geoSpots}
+
+## 🔧 Troubleshooting
+
+### "Python nicht gefunden"
+- Installiere Python 3.x von https://python.org
+- Stelle sicher, dass Python im PATH ist
+
+### "MapConv Download fehlgeschlagen"
+- Prüfe deine Internet-Verbindung
+- Versuche es später nochmal
+- Lade MapConv manuell von https://github.com/spring/spring/releases
+
+### "Map nicht in BAR sichtbar"
+- Starte BAR neu
+- Prüfe ob die .sd7 Datei im richtigen maps/ Ordner ist
+- Prüfe Dateiberechtigungen
+
+### "Build fehlgeschlagen"
+- Prüfe ob alle Asset-Dateien im assets/ Ordner sind
+- Stelle sicher, dass genug Speicherplatz frei ist
+- Führe das Script als Administrator/root aus (falls nötig)
+
+## 🆘 Support
+
+Falls du Probleme hast:
+
+1. **Prüfe die Konsolen-Ausgabe** auf Fehlermeldungen
+2. **Stelle sicher**, dass alle Dateien extrahiert wurden
+3. **Versuche das Python-Script direkt**: \`python3 build_map.py\`
+4. **Manueller Build**: Verwende MapConv direkt mit den Assets
+
+## 📝 Technische Details
+
+### Map-Format
+- **SMF**: Surface Map File (Höhendaten + Metadaten)
+- **SMT**: Surface Map Texture (komprimierte Texturen)
+- **SD7**: Spring-ZIP-Archive mit allen Map-Dateien
+
+### Asset-Auflösungen
+- Heightmap: ${64 * (mapConfig.size/64) + 1}x${64 * (mapConfig.size/64) + 1} Pixel (1025x1025)
+- Metalmap: ${32 * (mapConfig.size/64)}x${32 * (mapConfig.size/64)} Pixel (512x512)
+- Grassmap: ${16 * (mapConfig.size/64)}x${16 * (mapConfig.size/64)} Pixel (256x256)
+- Typemap: ${32 * (mapConfig.size/64)}x${32 * (mapConfig.size/64)} Pixel (512x512)
+- Texture: ${512 * (mapConfig.size/64)}x${512 * (mapConfig.size/64)} Pixel (8192x8192)
+- Minimap: 1024x1024 Pixel
+
+## 🎉 Viel Spaß mit deiner Map!
+
+Erstellt mit ❤️ vom **BAR Map Generator**
+https://github.com/beyond-all-reason/bar-map-generator
+
+---
+*Dieses Paket wurde automatisch generiert am ${new Date().toLocaleDateString('de-DE')} um ${new Date().toLocaleTimeString('de-DE')}*
+`;
+        }
+        
+        function generateBARAssets() {
+            const size = mapConfig.size;
+            const mapUnits = size / 64; // BAR map units (e.g., 1024 = 16 units)
+            
+            console.log("Generating BAR assets for size:", size, "units:", mapUnits);
+            
+            return {
+                // Core maps with correct BAR dimensions
+                heightmap: generateBARHeightmap(),     // 16-bit PNG: (64 * mapUnits + 1)²
+                metalmap: generateBARMetalmap(),       // 8-bit BMP: (16 * mapUnits)²
+                texture: generateBARTexture(),         // 8-bit BMP: (512 * mapUnits)²
+                normalmap: generateBARNormalmap(),     // 8-bit PNG: same as texture
+                specularmap: generateBARSpecularmap(), // 8-bit PNG: half of texture
+                minimap: generateBARMinimap(),         // 8-bit PNG: 1024x1024
+                grassmap: generateBARGrassmap(),       // 8-bit BMP: (16 * mapUnits)²
+                typemap: generateBARTypemap(),         // 8-bit BMP: (16 * mapUnits)²
+                splatmap: generateBARSplatmap(),       // RGBA PNG: 2048x(2048*aspect)
+                
+                // Configuration
+                mapinfo: generateBARMapInfo(),
+                maphelper: generateBARMapHelper(),
+                
+                // Asset lists for folders
+                features: [],
+                mapconfig: {},
+                objects3d: [],
+                unittextures: []
+            };
+        }
+        
+        function generateBARHeightmap() {
+            const size = mapConfig.size;
+            const mapUnits = size / 64;
+            const heightmapSize = 64 * mapUnits + 1;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = heightmapSize;
+            canvas.height = heightmapSize;
+            const ctx = canvas.getContext('2d');
+            
+            const imageData = ctx.createImageData(heightmapSize, heightmapSize);
+            const scale = size / heightmapSize;
+            
+            for (let y = 0; y < heightmapSize; y++) {
+                for (let x = 0; x < heightmapSize; x++) {
+                    const sourceX = Math.floor(x * scale);
+                    const sourceY = Math.floor(y * scale);
+                    const height = heightmapData[sourceY * size + sourceX];
+                    const index = (y * heightmapSize + x) * 4;
+                    
+                    // For BMP format, use simple 8-bit grayscale (PyMapConv can handle this)
+                    imageData.data[index] = height;       // R - height value
+                    imageData.data[index + 1] = height;   // G - height value (grayscale)
+                    imageData.data[index + 2] = height;   // B - height value (grayscale)
+                    imageData.data[index + 3] = 255;      // A - full alpha
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+        
+        function generateBARMetalmap() {
+            const size = mapConfig.size;
+            const mapUnits = size / 64;
+            // PyMapConv expects 32 * mapUnits for metalmap (512x512 for 16x16 map)
+            const metalmapSize = 32 * mapUnits; // Corrected size: 512x512 for 1024x1024 map
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = metalmapSize;
+            canvas.height = metalmapSize;
+            const ctx = canvas.getContext('2d');
+            
+            // Clear to black (no metal)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, metalmapSize, metalmapSize);
+            
+            // Draw metal spots as pure red pixels
+            const scale = metalmapSize / size;
+            ctx.fillStyle = '#FF0000'; // Full red = max metal
+            
+            resourceData.metalSpots.forEach(spot => {
+                const x = Math.floor(spot.x * scale);
+                const y = Math.floor(spot.y * scale);
+                const metalRadius = 2; // 4px diameter as per BAR documentation
+                
+                ctx.beginPath();
+                ctx.arc(x, y, metalRadius, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            
+            return canvas;
+        }
+        
+        function generateBARTexture() {
+            const size = mapConfig.size;
+            const mapUnits = size / 64;
+            const textureSize = 512 * mapUnits;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = textureSize;
+            canvas.height = textureSize;
+            const ctx = canvas.getContext('2d');
+            
+            const imageData = ctx.createImageData(textureSize, textureSize);
+            const scale = size / textureSize;
+            
+            for (let y = 0; y < textureSize; y++) {
+                for (let x = 0; x < textureSize; x++) {
+                    const sourceX = Math.floor(x * scale);
+                    const sourceY = Math.floor(y * scale);
+                    const sourceIndex = (sourceY * size + sourceX) * 4;
+                    const index = (y * textureSize + x) * 4;
+                    
+                    imageData.data[index] = textureData[sourceIndex];         // R
+                    imageData.data[index + 1] = textureData[sourceIndex + 1]; // G
+                    imageData.data[index + 2] = textureData[sourceIndex + 2]; // B
+                    imageData.data[index + 3] = 255;                          // A - solid, no transparency
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+        
+        function generateBARNormalmap() {
+            const size = mapConfig.size;
+            const mapUnits = size / 64;
+            const normalmapSize = 512 * mapUnits;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = normalmapSize;
+            canvas.height = normalmapSize;
+            const ctx = canvas.getContext('2d');
+            
+            const imageData = ctx.createImageData(normalmapSize, normalmapSize);
+            
+            // Generate simple normalmap from heightmap
+            for (let y = 0; y < normalmapSize; y++) {
+                for (let x = 0; x < normalmapSize; x++) {
+                    const heightScale = size / normalmapSize;
+                    const hx = Math.floor(x * heightScale);
+                    const hy = Math.floor(y * heightScale);
+                    
+                    // Sample neighboring heights for normal calculation
+                    const h0 = getHeightAt(hx, hy);
+                    const h1 = getHeightAt(hx + 1, hy);
+                    const h2 = getHeightAt(hx, hy + 1);
+                    
+                    // Calculate normal
+                    const dx = (h1 - h0) / 255;
+                    const dy = (h2 - h0) / 255;
+                    
+                    const nx = -dx;
+                    const ny = -dy;
+                    const nz = 1;
+                    
+                    // Normalize
+                    const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                    const normalX = (nx / length + 1) * 127.5;
+                    const normalY = (ny / length + 1) * 127.5;
+                    const normalZ = (nz / length + 1) * 127.5;
+                    
+                    const index = (y * normalmapSize + x) * 4;
+                    imageData.data[index] = normalX;     // R
+                    imageData.data[index + 1] = normalY; // G
+                    imageData.data[index + 2] = normalZ; // B
+                    imageData.data[index + 3] = 255;     // A
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+        
+        function getHeightAt(x, y) {
+            const size = mapConfig.size;
+            x = Math.max(0, Math.min(size - 1, x));
+            y = Math.max(0, Math.min(size - 1, y));
+            return heightmapData[y * size + x];
+        }
+        
+        function generateBARSpecularmap() {
+            const size = mapConfig.size;
+            const mapUnits = size / 64;
+            const specularSize = 256 * mapUnits; // Half resolution
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = specularSize;
+            canvas.height = specularSize;
+            const ctx = canvas.getContext('2d');
+            
+            const imageData = ctx.createImageData(specularSize, specularSize);
+            const scale = size / specularSize;
+            
+            for (let y = 0; y < specularSize; y++) {
+                for (let x = 0; x < specularSize; x++) {
+                    const sourceX = Math.floor(x * scale);
+                    const sourceY = Math.floor(y * scale);
+                    const height = heightmapData[sourceY * size + sourceX];
+                    const index = (y * specularSize + x) * 4;
+                    
+                    // Generate specular based on height and material type
+                    let specular = 64; // Base specular
+                    if (height < mapConfig.waterLevel) {
+                        specular = 200; // Water is reflective
+                    } else if (height > mapConfig.waterLevel + 100) {
+                        specular = 128; // Rock is somewhat reflective
+                    }
+                    
+                    imageData.data[index] = specular;     // R
+                    imageData.data[index + 1] = specular; // G
+                    imageData.data[index + 2] = specular; // B
+                    imageData.data[index + 3] = 255;      // A
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+        
+        function generateBARMinimap() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+            
+            const imageData = ctx.createImageData(1024, 1024);
+            const scale = mapConfig.size / 1024;
+            
+            for (let y = 0; y < 1024; y++) {
+                for (let x = 0; x < 1024; x++) {
+                    const sourceX = Math.floor(x * scale);
+                    const sourceY = Math.floor(y * scale);
+                    const sourceIndex = (sourceY * mapConfig.size + sourceX) * 4;
+                    const index = (y * 1024 + x) * 4;
+                    
+                    imageData.data[index] = textureData[sourceIndex];         // R
+                    imageData.data[index + 1] = textureData[sourceIndex + 1]; // G
+                    imageData.data[index + 2] = textureData[sourceIndex + 2]; // B
+                    imageData.data[index + 3] = 255;                          // A
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+        
+        function generateBARGrassmap() {
+            const size = mapConfig.size;
+            const mapUnits = size / 64;
+            // PyMapConv expects 16 * mapUnits for grassmap (256x256 for 16x16 map)
+            const grassSize = 16 * mapUnits; // Corrected size: 256x256 for 1024x1024 map
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = grassSize;
+            canvas.height = grassSize;
+            const ctx = canvas.getContext('2d');
+            
+            const imageData = ctx.createImageData(grassSize, grassSize);
+            const scale = size / grassSize;
+            
+            for (let y = 0; y < grassSize; y++) {
+                for (let x = 0; x < grassSize; x++) {
+                    const sourceX = Math.floor(x * scale);
+                    const sourceY = Math.floor(y * scale);
+                    const height = heightmapData[sourceY * size + sourceX];
+                    const index = (y * grassSize + x) * 4;
+                    
+                    // Grass density based on height (grass grows on land, not water)
+                    let grassDensity = 0;
+                    if (height > mapConfig.waterLevel + 5 && height < mapConfig.waterLevel + 100) {
+                        grassDensity = 128 + Math.random() * 127; // Medium to high grass on suitable terrain
+                    }
+                    
+                    imageData.data[index] = grassDensity;     // R
+                    imageData.data[index + 1] = grassDensity; // G
+                    imageData.data[index + 2] = grassDensity; // B
+                    imageData.data[index + 3] = 255;          // A (will be removed in BMP conversion)
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+        
+        function generateBARTypemap() {
+            const size = mapConfig.size;
+            const mapUnits = size / 64;
+            // PyMapConv expects 32 * mapUnits for typemap (512x512 for 16x16 map)  
+            const typeSize = 32 * mapUnits; // Corrected size: 512x512 for 1024x1024 map
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = typeSize;
+            canvas.height = typeSize;
+            const ctx = canvas.getContext('2d');
+            
+            const imageData = ctx.createImageData(typeSize, typeSize);
+            const scale = size / typeSize;
+            
+            for (let y = 0; y < typeSize; y++) {
+                for (let x = 0; x < typeSize; x++) {
+                    const sourceX = Math.floor(x * scale);
+                    const sourceY = Math.floor(y * scale);
+                    const height = heightmapData[sourceY * size + sourceX];
+                    const index = (y * typeSize + x) * 4;
+                    
+                    // Type based on height (0=water, 85=land, 170=rock, 255=snow)
+                    let type = 0; // Water
+                    if (height > mapConfig.waterLevel) {
+                        if (height < mapConfig.waterLevel + 80) {
+                            type = 85; // Normal land
+                        } else if (height < mapConfig.waterLevel + 150) {
+                            type = 170; // Rock/hills
+                        } else {
+                            type = 255; // Snow/peaks
+                        }
+                    }
+                    
+                    imageData.data[index] = type;     // R
+                    imageData.data[index + 1] = type; // G
+                    imageData.data[index + 2] = type; // B
+                    imageData.data[index + 3] = 255;  // A
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+        
+        function generateBARSplatmap() {
+            const size = Math.max(2048, mapConfig.size / 2); // At least 2048px as per documentation
+            const aspectRatio = 1; // Square map
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size * aspectRatio;
+            const ctx = canvas.getContext('2d');
+            
+            // Simple splatmap - can be expanded for more detail textures
+            const imageData = ctx.createImageData(canvas.width, canvas.height);
+            
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const index = (y * canvas.width + x) * 4;
+                    
+                    // RGBA channels for 4 different detail textures
+                    imageData.data[index] = 255;     // R - Channel 1: Base terrain
+                    imageData.data[index + 1] = 0;   // G - Channel 2: Rock/cliffs
+                    imageData.data[index + 2] = 0;   // B - Channel 3: Sand/beach
+                    imageData.data[index + 3] = 0;   // A - Channel 4: Snow/ice
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+        
+        // INDIVIDUAL DOWNLOAD FUNCTIONS
+        function downloadHeightmap() {
+            if (!heightmapData) {
+                alert('Bitte erst eine Map generieren!');
+                return;
+            }
+            
+            const canvas = generateBARHeightmap();
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `heightmap_${mapConfig.size}x${mapConfig.size}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        function downloadMetalmap() {
+            if (!heightmapData) {
+                alert('Bitte erst eine Map generieren!');
+                return;
+            }
+            
+            const canvas = generateBARMetalmap();
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `metalmap_${mapConfig.size}x${mapConfig.size}.bmp`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        function downloadNormalmap() {
+            if (!heightmapData) {
+                alert('Bitte erst eine Map generieren!');
+                return;
+            }
+            
+            const canvas = generateBARNormalmap();
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `normalmap_${mapConfig.size}x${mapConfig.size}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        function downloadSpecularmap() {
+            if (!heightmapData) {
+                alert('Bitte erst eine Map generieren!');
+                return;
+            }
+            
+            const canvas = generateBARSpecularmap();
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `specularmap_${mapConfig.size}x${mapConfig.size}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        function downloadMinimap() {
+            if (!heightmapData) {
+                alert('Bitte erst eine Map generieren!');
+                return;
+            }
+            
+            const canvas = generateBARMinimap();
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `minimap_1024x1024.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        function downloadTexture() {
+            if (!textureData) {
+                alert('Bitte erst eine Map generieren!');
+                return;
+            }
+            
+            const canvas = document.createElement('canvas');
+            const size = mapConfig.size;
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            const imageData = ctx.createImageData(size, size);
+            
+            for (let i = 0; i < textureData.length; i++) {
+                imageData.data[i] = textureData[i];
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `texture_${size}x${size}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        // ZIP CREATION FOR COMPLETE MAP PACKAGE
+        async function createCompleteMapPackage(assets, buildScripts, mapName) {
+            if (typeof JSZip === 'undefined') {
+                throw new Error('JSZip library nicht verfügbar. Lade die Seite neu.');
+            }
+            
+            const zip = new JSZip();
+            
+            console.log("Creating complete BAR map package...");
+            
+            // Create directory structure
+            const assetsFolder = zip.folder("assets");
+            
+            // Add build scripts (root level)
+            zip.file("build_map.py", buildScripts.python);
+            zip.file("build.bat", buildScripts.batch);
+            zip.file("build.sh", buildScripts.bash);
+            zip.file("requirements.txt", buildScripts.requirements);
+            zip.file("README.md", buildScripts.readme);
+            
+            // Add mapinfo.lua (root level for MapConv)
+            zip.file("mapinfo.lua", assets.mapinfo);
+            
+            // Convert canvases to blobs with correct formats for PyMapConv
+            const heightmapBlob = await canvasToBlob(assets.heightmap, 'image/png');  // Keep PNG for heightmap
+            const metalmapBlob = await canvasToBlob(assets.metalmap, 'image/bmp');
+            const textureBlob = await canvasToBlob(assets.texture, 'image/bmp');      // BMP without alpha
+            const normalmapBlob = await canvasToBlob(assets.normalmap, 'image/png');
+            const specularmapBlob = await canvasToBlob(assets.specularmap, 'image/png');
+            const minimapBlob = await canvasToBlob(assets.minimap, 'image/png');
+            const grassmapBlob = await canvasToBlob(assets.grassmap, 'image/bmp');
+            const typemapBlob = await canvasToBlob(assets.typemap, 'image/bmp');
+            const splatmapBlob = await canvasToBlob(assets.splatmap, 'image/png');
+            
+            // Add all asset files to assets folder
+            // Add all asset files to assets folder with correct formats for PyMapConv
+            assetsFolder.file("heightmap.bmp", heightmapBlob);  // BMP for heightmap (8-bit is acceptable)
+            assetsFolder.file("metalmap.bmp", metalmapBlob);
+            assetsFolder.file("texture.bmp", textureBlob);      // BMP without alpha channel
+            assetsFolder.file("normalmap.png", normalmapBlob);
+            assetsFolder.file("specularmap.png", specularmapBlob);
+            assetsFolder.file("minimap.png", minimapBlob);
+            assetsFolder.file("grassmap.bmp", grassmapBlob);
+            assetsFolder.file("typemap.bmp", typemapBlob);
+            assetsFolder.file("splatmap.png", splatmapBlob);
+            
+            // Add package metadata
+            zip.file("VERSION", "1.0\nGenerated by BAR Map Generator");
+            zip.file("INSTALL.txt", generateInstallInstructions(mapName));
+            
+            // Generate the ZIP file
+            console.log("Generating complete package ZIP...");
+            const zipBlob = await zip.generateAsync({
+                type: "blob",
+                compression: "DEFLATE",
+                compressionOptions: {
+                    level: 6
+                }
+            });
+            
+            console.log("Complete package generated successfully, size:", zipBlob.size, "bytes");
+            return zipBlob;
+        }
+        
+        function generateInstallInstructions(mapName) {
+            return `BAR Map Builder - Installationsanleitung
+==========================================
+
+🎯 SCHNELLSTART:
+
+Windows:
+  Doppelklick auf build.bat
+
+Linux/macOS:
+  Terminal öffnen → ./build.sh ausführen
+
+📋 VORAUSSETZUNGEN:
+- Python 3.6+ (https://python.org)
+- Internet-Verbindung
+- ~500MB freier Speicher
+
+🔧 WAS PASSIERT:
+1. Spring Map Tools werden automatisch heruntergeladen
+2. Alle Assets werden in BAR-Format kompiliert
+3. Fertige .sd7 Map wird in deinen BAR-Ordner kopiert
+
+🎮 DANN:
+- BAR starten
+- "${mapName}" in der Map-Liste finden
+- Spielen!
+
+📁 PAKET-INHALT:
+- assets/: Alle Map-Grafiken (PNG/BMP)
+- build_map.py: Haupt-Kompiler (Python)
+- build.bat: Windows-Script
+- build.sh: Linux/macOS-Script  
+- mapinfo.lua: Map-Konfiguration
+- README.md: Detaillierte Anleitung
+
+🆘 PROBLEME?
+Siehe README.md für Troubleshooting
+
+Erstellt: ${new Date().toLocaleDateString('de-DE')}
+Generator: BAR Map Generator v1.0
+`;
+        }
+        
+        function canvasToBlob(canvas, type = 'image/png') {
+            return new Promise(resolve => {
+                // For BMP files, we need to ensure RGB format (no alpha)
+                if (type === 'image/bmp') {
+                    // Create a new canvas with RGB-only context
+                    const rgbCanvas = document.createElement('canvas');
+                    rgbCanvas.width = canvas.width;
+                    rgbCanvas.height = canvas.height;
+                    const rgbCtx = rgbCanvas.getContext('2d', { alpha: false });
+                    
+                    // Fill with black background (for heightmaps/metal) or white (for textures)
+                    rgbCtx.fillStyle = 'black';
+                    rgbCtx.fillRect(0, 0, rgbCanvas.width, rgbCanvas.height);
+                    
+                    // Set composite operation to overwrite alpha
+                    rgbCtx.globalCompositeOperation = 'source-over';
+                    
+                    // Draw original canvas on top
+                    rgbCtx.drawImage(canvas, 0, 0);
+                    
+                    // Force RGB by creating image data and removing alpha
+                    const imageData = rgbCtx.getImageData(0, 0, rgbCanvas.width, rgbCanvas.height);
+                    for (let i = 3; i < imageData.data.length; i += 4) {
+                        imageData.data[i] = 255; // Set alpha to 255 (opaque)
+                    }
+                    rgbCtx.putImageData(imageData, 0, 0);
+                    
+                    // Convert to blob as PNG (browsers don't support BMP creation well)
+                    rgbCanvas.toBlob(resolve, 'image/png');
+                } else {
+                    canvas.toBlob(resolve, type);
+                }
+            });
+        }
+        
+        function generateReadme(mapName) {
+            return `BAR Map: ${mapName}
+=========================
+
+Diese Map wurde automatisch mit dem BAR Map Generator erstellt.
+
+Inhalt der SD7-Datei:
+- mapinfo.lua: Hauptkonfiguration der Map
+- maphelper/maphelper.lua: Hilfsfunktionen für die Map
+- maps/: Alle Bild-Assets der Map
+  * ${mapName}.smf.png: Höhenkarte (Heightmap)
+  * ${mapName}_metal.png: Metallvorkommen
+  * ${mapName}_texture.png: Oberflächentextur
+  * ${mapName}_normal.png: Normalmap für Details
+  * ${mapName}_specular.png: Spiegelung/Glanz
+  * ${mapName}_minimap.png: Minimap
+  * ${mapName}_grass.png: Grasdichte
+  * ${mapName}_type.png: Geländetypen
+  * ${mapName}_splat.png: Detail-Textur-Mapping
+
+Installation:
+1. Diese .sd7 Datei in den BAR maps Ordner kopieren
+2. BAR neustarten
+3. Map im Spiel auswählen
+
+Weitere Informationen:
+- Generator Version: 1.0
+- Erstellt: ${new Date().toLocaleDateString('de-DE')}
+- Map-Größe: ${mapConfig.size}x${mapConfig.size}
+- Terrain-Typ: ${mapConfig.terrainType}
+- Spieler: ${mapConfig.playerCount}
+
+BAR Map Generator
+https://github.com/beyond-all-reason/bar-map-generator
+`;
+        }
+        
+        function generateBARMapInfo() {
+            const config = mapConfig;
+            const mapUnits = config.size / 64;
+            
+            return `-- Beyond All Reason Map Configuration
+-- Generated by BAR Map Generator
+-- Map Size: ${config.size}x${config.size} (${mapUnits}x${mapUnits} units)
+-- Terrain Type: ${config.terrainType}
+-- Players: ${config.playerCount}
+
+return {
+    -- Basic map info
+    name = "Generated ${config.terrainType} Map ${config.size}x${config.size}",
+    shortname = "gen_${config.terrainType}_${config.size}",
+    description = "Procedurally generated ${config.terrainType} map for ${config.playerCount} players",
+    author = "BAR Map Generator",
+    version = "1.0",
+    
+    -- Map dimensions (in Spring units)
+    mapx = ${config.size * 8}, -- Spring map units (size * 8)
+    mapy = ${config.size * 8},
+    
+    -- Gameplay settings
+    maxplayers = ${config.playerCount},
+    gravity = 130,
+    tidalstrength = 20,
+    maxmetal = ${(config.metalSpots * config.metalStrength).toFixed(1)},
+    extractorradius = 64,
+    
+    -- Water settings
+    waterlevel = ${(config.waterLevel / 255 * config.heightVariation).toFixed(1)},
+    waterdamage = 5,
+    
+    -- Visual settings
+    lighting = {
+        specularexponent = 100,
+        groundshadowdensity = 0.8,
+        groundreflectance = 0.1,
+    },
+    
+    -- Atmosphere
+    atmosphere = {
+        minheight = -500,
+        maxheight = 10000,
+        thickness = 400,
+        color = {0.5, 0.7, 1.0},
+    },
+    
+    -- Start positions
+    teams = {`;
+            
+            config.startPositions.forEach((pos, index) => {
+                const springX = pos.x * 8; // Convert to Spring coordinates
+                const springZ = pos.y * 8;
+                return `
+        [${index}] = {
+            startposx = ${springX},
+            startposz = ${springZ},
+        },`;
+            }).join('');
+            
+            const mapInfo = `
+    },
+    
+    -- Metal spots
+    metal = {`;
+            
+            resourceData.metalSpots.forEach((spot, index) => {
+                const springX = spot.x * 8;
+                const springZ = spot.y * 8;
+                return `
+        [${index}] = {
+            x = ${springX},
+            z = ${springZ},
+            metal = ${spot.value.toFixed(1)},
+        },`;
+            }).join('');
+            
+            const geoInfo = `
+    },
+    
+    -- Geothermal spots  
+    geothermal = {`;
+            
+            resourceData.geoSpots.forEach((spot, index) => {
+                const springX = spot.x * 8;
+                const springZ = spot.y * 8;
+                return `
+        [${index}] = {
+            x = ${springX},
+            z = ${springZ},
+            energy = ${spot.value.toFixed(0)},
+        },`;
+            }).join('');
+            
+            const endInfo = `
+    },
+    
+    -- Terrain types
+    terraintypes = {
+        [0] = {
+            name = "Water",
+            hardness = 0.0,
+            receiveTrackstype = 0,
+            movespeed = {
+                tank = 0.0,
+                kbot = 0.0,
+                hover = 1.0,
+                ship = 1.0,
+            },
+        },
+        [1] = {
+            name = "Land",
+            hardness = 1.0,
+            receiveTrackstype = 1,
+            movespeed = {
+                tank = 1.0,
+                kbot = 1.0,
+                hover = 1.0,
+                ship = 0.0,
+            },
+        },
+        [2] = {
+            name = "Rock",
+            hardness = 1.0,
+            receiveTrackstype = 1,
+            movespeed = {
+                tank = 0.8,
+                kbot = 0.9,
+                hover = 1.0,
+                ship = 0.0,
+            },
+        },
+        [3] = {
+            name = "Snow",
+            hardness = 0.8,
+            receiveTrackstype = 1,
+            movespeed = {
+                tank = 0.7,
+                kbot = 0.8,
+                hover = 1.0,
+                ship = 0.0,
+            },
+        },
+    },
+    
+    -- Custom properties
+    custom = {
+        terrain_type = "${config.terrainType}",
+        noise_strength = ${config.noiseStrength},
+        height_variation = ${config.heightVariation},
+        generated = true,
+        generator_version = "1.0",
+    },
+    
+    -- Splat texture detail
+    splatdetailnormalmap = "maps/${config.terrainType}_detail_normal.png",
+    splatdetaildiffusetex = "maps/${config.terrainType}_detail_diffuse.png",
+    
+    -- Map features can be added here
+    featureplacer = {},
+}`;
+            
+            return mapInfo + geoInfo + endInfo;
+        }
+        
+        function generateBARMapHelper() {
+            return `-- Map Helper for BAR
+-- Generated by BAR Map Generator
+
+if not Script then
+    Script = {}
+end
+
+local mapName = Game.mapName or "generated_map"
+
+-- Helper functions for map initialization
+function Script.MapPostLoad()
+    -- Map-specific initialization can go here
+    Spring.Echo("Map loaded: " .. mapName)
+end
+
+return {}`;
+        }
+        
+        function downloadConfig() {
+            if (!mapConfig) {
+                alert('Bitte erst eine Map generieren!');
+                return;
+            }
+            
+            const luaConfig = generateBARMapInfo();
+            const blob = new Blob([luaConfig], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `mapinfo_${mapConfig.size}x${mapConfig.size}.lua`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Initialize displays on page load
+        window.addEventListener('load', function() {
+            updateValueDisplays();
+        });
+    </script>
+</body>
+</html>
