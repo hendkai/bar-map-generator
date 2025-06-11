@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -154,104 +154,104 @@
         
         <div class="controls">
             <div class="control-group">
-                <h3>Karten-Grundlagen</h3>
-                <label>Kartengröße:
+                <h3>Map Basics</h3>
+                <label>Map Size:
                     <select id="mapSize">
-                        <option value="512">512x512 (Klein)</option>
-                        <option value="1024" selected>1024x1024 (Mittel)</option>
-                        <option value="2048">2048x2048 (Groß)</option>
+                        <option value="512">512x512 (Small)</option>
+                        <option value="1024" selected>1024x1024 (Medium)</option>
+                        <option value="2048">2048x2048 (Large)</option>
                     </select>
                 </label>
                 
-                <label>Terrain-Typ:
+                <label>Terrain Type:
                     <select id="terrainType">
-                        <option value="continental">Kontinental</option>
-                        <option value="islands">Inseln</option>
+                        <option value="continental">Continental</option>
+                        <option value="islands">Islands</option>
                         <option value="canyon">Canyon</option>
-                        <option value="hills">Hügelig</option>
-                        <option value="flat">Flach</option>
+                        <option value="hills">Hills</option>
+                        <option value="flat">Flat</option>
                     </select>
                 </label>
                 
-                <label>Anzahl Spieler:
+                <label>Player Count:
                     <select id="playerCount">
-                        <option value="2">2 Spieler</option>
-                        <option value="4" selected>4 Spieler</option>
-                        <option value="6">6 Spieler</option>
-                        <option value="8">8 Spieler</option>
+                        <option value="2">2 Players</option>
+                        <option value="4" selected>4 Players</option>
+                        <option value="6">6 Players</option>
+                        <option value="8">8 Players</option>
                     </select>
                 </label>
             </div>
             
             <div class="control-group">
-                <h3>Gelände-Parameter</h3>
-                <label>Rauschstärke: <span class="value-display" id="noiseValue">0.5</span>
+                <h3>Terrain Parameters</h3>
+                <label>Noise Strength: <span class="value-display" id="noiseValue">0.5</span>
                     <input type="range" id="noiseStrength" min="0.1" max="1.0" step="0.1" value="0.5">
                 </label>
                 
-                <label>Höhen-Variation: <span class="value-display" id="heightValue">128</span>
+                <label>Height Variation: <span class="value-display" id="heightValue">128</span>
                     <input type="range" id="heightVariation" min="50" max="255" step="5" value="128">
                 </label>
                 
-                <label>Wasserlevel: <span class="value-display" id="waterValue">64</span>
+                <label>Water Level: <span class="value-display" id="waterValue">64</span>
                     <input type="range" id="waterLevel" min="0" max="128" step="4" value="64">
                 </label>
                 
-                <label>Glättungsgrad: <span class="value-display" id="smoothValue">2</span>
+                <label>Smoothing: <span class="value-display" id="smoothValue">2</span>
                     <input type="range" id="smoothing" min="0" max="5" step="1" value="2">
                 </label>
             </div>
             
             <div class="control-group">
-                <h3>Ressourcen</h3>
-                <label>Metal-Spots: <span class="value-display" id="metalValue">20</span>
+                <h3>Resources</h3>
+                <label>Metal Spots: <span class="value-display" id="metalValue">20</span>
                     <input type="range" id="metalSpots" min="10" max="50" step="2" value="20">
                 </label>
                 
-                <label>Metal-Stärke: <span class="value-display" id="metalStrengthValue">2.0</span>
+                <label>Metal Strength: <span class="value-display" id="metalStrengthValue">2.0</span>
                     <input type="range" id="metalStrength" min="1.0" max="5.0" step="0.1" value="2.0">
                 </label>
                 
-                <label>Geo-Spots: <span class="value-display" id="geoValue">4</span>
+                <label>Geo Spots: <span class="value-display" id="geoValue">4</span>
                     <input type="range" id="geoSpots" min="2" max="12" step="1" value="4">
                 </label>
             </div>
         </div>
         
         <div class="button-container">
-            <button onclick="generateMap()">🎲 Map Generieren (nur Vorschau)</button>
-            <button onclick="randomizeSettings()">⚡ Zufällige Einstellungen</button>
+            <button onclick="generateMap()">🎲 Generate Map (Preview Only)</button>
+            <button onclick="randomizeSettings()">⚡ Randomize Settings</button>
         </div>
         
         <div class="canvas-container">
             <div class="canvas-wrapper">
-                <h3>Höhenkarte</h3>
+                <h3>Heightmap</h3>
                 <canvas id="heightmapCanvas" width="512" height="512"></canvas>
             </div>
             
             <div class="canvas-wrapper">
-                <h3>Texturkarte</h3>
+                <h3>Texture Map</h3>
                 <canvas id="textureCanvas" width="512" height="512"></canvas>
             </div>
             
             <div class="canvas-wrapper">
-                <h3>Ressourcenkarte</h3>
+                <h3>Resource Map</h3>
                 <canvas id="resourceCanvas" width="512" height="512"></canvas>
             </div>
         </div>
         
         <div class="download-section">
-            <h3>📥 Export für BAR</h3>
-            <button onclick="downloadCompleteMapPackage()">🎯 Vollständiges BAR Map-Paket herunterladen (.zip)</button>
+            <h3>📥 Export for BAR</h3>
+            <button onclick="downloadCompleteMapPackage()">🎯 Download Complete BAR Map Package (.zip)</button>
             <br>
             <p style="margin: 15px 0; font-size: 14px; opacity: 0.8;">
-                Generiert alle Assets + automatisches Build-Script. Einfach das Script ausführen und fertig!
+                ⚠️ <strong>Experimental:</strong> Generates all assets + automatic build script. May not work reliably yet!
             </p>
             <hr style="margin: 20px 0; border: 1px solid rgba(255,255,255,0.2);">
-            <h4>Einzelne Dateien:</h4>
-            <button onclick="downloadHeightmap()">Höhenkarte (.png)</button>
+            <h4>Individual Files:</h4>
+            <button onclick="downloadHeightmap()">Heightmap (.png)</button>
             <button onclick="downloadMetalmap()">Metalmap (.bmp)</button>
-            <button onclick="downloadTexture()">Texturkarte (.bmp)</button>
+            <button onclick="downloadTexture()">Texture (.bmp)</button>
             <button onclick="downloadNormalmap()">Normalmap (.png)</button>
             <button onclick="downloadSpecularmap()">Specularmap (.png)</button>
             <button onclick="downloadMinimap()">Minimap (.png)</button>
@@ -259,12 +259,13 @@
         </div>
         
         <div class="info">
-            <h3>💡 Verwendungshinweise</h3>
-            <p><strong>1. Map generieren:</strong> Stelle die Parameter nach deinen Wünschen ein und klicke "Map Generieren".</p>
-            <p><strong>2. Komplettes Paket herunterladen:</strong> Klicke "Vollständiges BAR Map-Paket herunterladen".</p>
-            <p><strong>3. Build-Script ausführen:</strong> Entpacke das ZIP und führe das mitgelieferte Build-Script aus.</p>
-            <p><strong>4. Fertige Map installieren:</strong> Die generierte .sd7 Datei in deinen BAR maps Ordner kopieren.</p>
-            <p><strong>Benötigt:</strong> Python 3.x und Spring Map Tools (MapConv) - wird automatisch heruntergeladen falls nicht vorhanden.</p>
+            <h3>💡 Usage Instructions</h3>
+            <p><strong>⚠️ Development Status:</strong> This tool is experimental and may not work reliably yet.</p>
+            <p><strong>1. Generate Map:</strong> Adjust parameters to your liking and click "Generate Map".</p>
+            <p><strong>2. Download Package:</strong> Click "Download Complete BAR Map Package" (experimental).</p>
+            <p><strong>3. Run Build Script:</strong> Extract the ZIP and run the included build script.</p>
+            <p><strong>4. Install Map:</strong> Copy the generated .sd7 file to your BAR maps folder.</p>
+            <p><strong>Requirements:</strong> Python 3.x and Spring Map Tools (PyMapConv) - downloaded automatically if not present.</p>
         </div>
     </div>
 
@@ -333,7 +334,7 @@
                 console.log("All maps drawn successfully");
             } catch (error) {
                 console.error("Error drawing maps:", error);
-                alert("Fehler beim Zeichnen der Karten: " + error.message);
+                alert("Error drawing maps: " + error.message);
             }
         }
         
@@ -726,7 +727,7 @@
         // COMPLETE BAR MAP PACKAGE GENERATION
         async function downloadCompleteMapPackage() {
             if (!heightmapData) {
-                alert('Bitte erst eine Map generieren!');
+                alert('Please generate a map first!');
                 return;
             }
             
@@ -754,7 +755,7 @@
                 console.log("Complete BAR map package generated successfully!");
             } catch (error) {
                 console.error("Error generating BAR map package:", error);
-                alert("Fehler beim Generieren des BAR Map-Pakets: " + error.message);
+                alert("Error generating BAR map package: " + error.message);
             }
         }
         
@@ -2245,7 +2246,7 @@ https://github.com/beyond-all-reason/bar-map-generator
         // INDIVIDUAL DOWNLOAD FUNCTIONS
         function downloadHeightmap() {
             if (!heightmapData) {
-                alert('Bitte erst eine Map generieren!');
+                alert('Please generate a map first!');
                 return;
             }
             
@@ -2262,7 +2263,7 @@ https://github.com/beyond-all-reason/bar-map-generator
         
         function downloadMetalmap() {
             if (!heightmapData) {
-                alert('Bitte erst eine Map generieren!');
+                alert('Please generate a map first!');
                 return;
             }
             
@@ -2279,7 +2280,7 @@ https://github.com/beyond-all-reason/bar-map-generator
         
         function downloadNormalmap() {
             if (!heightmapData) {
-                alert('Bitte erst eine Map generieren!');
+                alert('Please generate a map first!');
                 return;
             }
             
@@ -2296,7 +2297,7 @@ https://github.com/beyond-all-reason/bar-map-generator
         
         function downloadSpecularmap() {
             if (!heightmapData) {
-                alert('Bitte erst eine Map generieren!');
+                alert('Please generate a map first!');
                 return;
             }
             
@@ -2313,7 +2314,7 @@ https://github.com/beyond-all-reason/bar-map-generator
         
         function downloadMinimap() {
             if (!heightmapData) {
-                alert('Bitte erst eine Map generieren!');
+                alert('Please generate a map first!');
                 return;
             }
             
@@ -2330,7 +2331,7 @@ https://github.com/beyond-all-reason/bar-map-generator
         
         function downloadTexture() {
             if (!textureData) {
-                alert('Bitte erst eine Map generieren!');
+                alert('Please generate a map first!');
                 return;
             }
             
@@ -2361,7 +2362,7 @@ https://github.com/beyond-all-reason/bar-map-generator
         // ZIP CREATION FOR COMPLETE MAP PACKAGE
         async function createCompleteMapPackage(assets, buildScripts, mapName) {
             if (typeof JSZip === 'undefined') {
-                throw new Error('JSZip library nicht verfügbar. Lade die Seite neu.');
+                throw new Error('JSZip library not available. Please reload the page.');
             }
             
             const zip = new JSZip();
@@ -2724,7 +2725,7 @@ return {}`;
         
         function downloadConfig() {
             if (!mapConfig) {
-                alert('Bitte erst eine Map generieren!');
+                alert('Please generate a map first!');
                 return;
             }
             
