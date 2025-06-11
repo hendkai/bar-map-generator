@@ -145,5 +145,3 @@ This project is open source. See LICENSE file for details.
 ---
 
 **Generated with ❤️ for the BAR community**
-
-*Last updated: December 2024*
