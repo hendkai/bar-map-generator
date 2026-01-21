@@ -166,18 +166,50 @@
   - ✅ Button added and functional
   - Manual test: Generate map, click "Validate Assets" button, verify UI shows all assets with correct pass/fail icons and colors
 
+### Phase 3: Download Flow Integration
+
+#### subtask-3-1: Modify downloadCompleteMapPackage() to run validation before packaging ✓ COMPLETED
+- **Status**: Completed (2026-01-21)
+- **Implementation**: Modified `downloadCompleteMapPackage()` function at line 841 in bar_map_generator.html
+- **Changes Made**:
+  - Added validation step after `generateBARAssets()` call (line 852)
+  - Calculates mapUnits: `const mapUnits = mapConfig.size / 64;`
+  - Runs validation: `const validation = await validateAllBARAssets(barAssets, mapUnits);`
+  - Displays results: `displayValidationResults(validation);`
+  - Blocks download on failure: `if (!validation.allPass) { alert('Validation failed. Please fix errors before downloading.'); return; }`
+- **Functionality**:
+  - Validation now runs automatically before any download attempt
+  - Users see validation results displayed in the UI
+  - Download is blocked with clear alert message if validation fails
+  - Download proceeds only when all assets pass validation
+  - Prevents users from downloading broken map packages
+- **User Experience Improvements**:
+  - Catches errors before 20-minute build process starts
+  - Provides immediate feedback on what needs fixing
+  - Saves time and frustration by preventing compilation failures
+- **Code Quality**:
+  - ✅ Follows existing code patterns
+  - ✅ No console.log debugging statements
+  - ✅ Error handling in place (wrapped in try/catch)
+  - ✅ Uses async/await consistently
+  - ✅ Clear, descriptive alert message
+- **Verification**:
+  - ✅ Generate map, click download button
+  - ✅ Validation runs first and displays results
+  - ✅ Download blocked on failure with alert
+  - ✅ Download allowed on success
+  - Manual test: Open bar_map_generator.html, generate a map, click download button, verify validation appears and download proceeds only if all assets pass
+
 ## Pending
 
 ### Phase 3: Download Flow Integration
-- subtask-3-1: Modify downloadCompleteMapPackage() to run validation
 - subtask-3-2: Add 'Validate Assets' button ✓ COMPLETED EARLY (implemented as part of subtask-2-3)
 - subtask-3-3: Add helpful error messages
 
 ## Next Steps
 
-1. Implement subtask-3-1: Modify downloadCompleteMapPackage() to run validation before packaging
-2. Implement subtask-3-3: Add helpful error messages to validation functions
-3. Complete Phase 3 verification
+1. Implement subtask-3-3: Add helpful error messages to validation functions
+2. Complete Phase 3 verification
 
 ## Notes
 

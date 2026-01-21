@@ -169,7 +169,7 @@
             "type": "manual",
             "instructions": "Generate map, click download button. Verify validation runs first, displays results, and blocks download on failure. Allow download on success."
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-3-2",
@@ -347,5 +347,5 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-01-21T19:49:40.098Z"
+  "updated_at": "2026-01-21T19:56:29.621Z"
 }
