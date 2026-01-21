@@ -310,7 +310,27 @@
             heightmapData = generateHeightmap(size, terrainType, noiseStrength, heightVariation, waterLevel, smoothing);
             textureData = generateTextureMap(size, heightmapData, waterLevel);
             resourceData = generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount);
-            
+
+            // Calculate and log resource balance
+            const balance = calculateResourceBalance(resourceData, playerCount);
+            console.log('\n=== RESOURCE BALANCE ANALYSIS ===');
+            console.log('Per-Player Resource Totals:');
+            balance.perPlayer.forEach(p => {
+                console.log(`  Player ${p.player}: ${p.metalSpotCount} spots, ${p.totalMetalValue.toFixed(1)} total metal (${p.avgMetalPerSpot.toFixed(2)} avg/spot)`);
+            });
+            console.log('\nTerritory Analysis:');
+            balance.territoryAnalysis.forEach(t => {
+                console.log(`  Player ${t.player}: ${t.territorySize.toLocaleString()} pixels (${t.territoryPercent.toFixed(1)}%), Balance: ${t.territoryBalance.toFixed(1)}%`);
+            });
+            console.log('\nFairness Metrics:');
+            console.log(`  Spot Distribution CV: ${balance.summary.spotDistributionCV}%`);
+            console.log(`  Metal Distribution CV: ${balance.summary.metalDistributionCV}%`);
+            console.log(`  Territory Distribution CV: ${balance.summary.territoryDistributionCV}%`);
+            console.log(`  Overall Fairness Score: ${balance.summary.overallFairness}/100`);
+            console.log(`  Total Metal Spots: ${balance.summary.totalMetalSpots}`);
+            console.log(`  Avg Metal per Spot: ${balance.summary.avgMetalPerSpot}`);
+            console.log('================================\n');
+
             mapConfig = {
                 size: size,
                 terrainType: terrainType,
@@ -1162,7 +1182,113 @@
 
             return resourceData;
         }
-        
+
+        function calculateResourceBalance(resourceData, playerCount) {
+            const balance = {
+                perPlayer: [],
+                territoryAnalysis: [],
+                fairnessScore: 0,
+                summary: {}
+            };
+
+            // Calculate per-player resource totals
+            for (let player = 0; player < playerCount; player++) {
+                const playerSpots = resourceData.metalSpots.filter(spot => spot.territory === player);
+                const totalMetal = playerSpots.reduce((sum, spot) => sum + spot.value, 0);
+                const avgMetalPerSpot = playerSpots.length > 0 ? totalMetal / playerSpots.length : 0;
+
+                balance.perPlayer.push({
+                    player: player + 1,
+                    metalSpotCount: playerSpots.length,
+                    totalMetalValue: totalMetal,
+                    avgMetalPerSpot: avgMetalPerSpot
+                });
+            }
+
+            // Analyze territories
+            if (resourceData.territories && resourceData.territories.territories) {
+                const territoryMap = resourceData.territories.territories;
+                const size = resourceData.size;
+                const totalPixels = size * size;
+
+                for (let player = 0; player < playerCount; player++) {
+                    let territoryPixels = 0;
+                    let landPixels = 0;
+
+                    for (let i = 0; i < territoryMap.length; i++) {
+                        if (territoryMap[i] === player) {
+                            territoryPixels++;
+                        }
+                    }
+
+                    // Calculate land area from spots (approximate using metal spot locations)
+                    const playerSpots = resourceData.metalSpots.filter(spot => spot.territory === player);
+                    landPixels = playerSpots.length * 100; // Approximate land area per spot
+
+                    const territoryPercent = (territoryPixels / totalPixels) * 100;
+                    const expectedPercent = 100 / playerCount;
+                    const territoryBalance = (territoryPercent / expectedPercent) * 100;
+
+                    balance.territoryAnalysis.push({
+                        player: player + 1,
+                        territorySize: territoryPixels,
+                        territoryPercent: territoryPercent,
+                        landArea: landPixels,
+                        territoryBalance: territoryBalance
+                    });
+                }
+            }
+
+            // Calculate fairness scores using coefficient of variation (CV)
+            // CV = (standard deviation / mean) * 100
+            // Lower CV = more balanced distribution
+            const calculateCV = (values) => {
+                if (values.length === 0) return 0;
+                const mean = values.reduce((a, b) => a + b, 0) / values.length;
+                if (mean === 0) return 0;
+                const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+                const stdDev = Math.sqrt(variance);
+                return (stdDev / mean) * 100;
+            };
+
+            const spotCounts = balance.perPlayer.map(p => p.metalSpotCount);
+            const metalTotals = balance.perPlayer.map(p => p.totalMetalValue);
+            const territorySizes = balance.territoryAnalysis.map(t => t.territorySize);
+
+            const spotCV = calculateCV(spotCounts);
+            const metalCV = calculateCV(metalTotals);
+            const territoryCV = calculateCV(territorySizes);
+
+            // Overall fairness score (0-100, higher is better)
+            // CV of 0% = 100% fair, CV of 25%+ = 0% fair
+            const cvToFairness = (cv) => Math.max(0, 100 - (cv * 4));
+
+            const spotFairness = cvToFairness(spotCV);
+            const metalFairness = cvToFairness(metalCV);
+            const territoryFairness = cvToFairness(territoryCV);
+
+            // Weighted average: metal distribution is most important
+            balance.fairnessScore = (
+                metalFairness * 0.5 +
+                spotFairness * 0.3 +
+                territoryFairness * 0.2
+            );
+
+            balance.summary = {
+                spotDistributionCV: spotCV.toFixed(1),
+                metalDistributionCV: metalCV.toFixed(1),
+                territoryDistributionCV: territoryCV.toFixed(1),
+                spotFairness: spotFairness.toFixed(1),
+                metalFairness: metalFairness.toFixed(1),
+                territoryFairness: territoryFairness.toFixed(1),
+                overallFairness: balance.fairnessScore.toFixed(1),
+                totalMetalSpots: resourceData.metalSpots.length,
+                avgMetalPerSpot: (metalTotals.reduce((a, b) => a + b, 0) / resourceData.metalSpots.length).toFixed(2)
+            };
+
+            return balance;
+        }
+
         function generateStartPositions(size, playerCount, heightmapData, waterLevel) {
             const positions = [];
             const radius = size * 0.35;
