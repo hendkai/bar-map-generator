@@ -244,6 +244,12 @@
             <div class="canvas-wrapper">
                 <h3>3D Terrain Preview</h3>
                 <canvas id="terrain3dCanvas" width="512" height="512"></canvas>
+                <div style="margin-top: 15px; text-align: center;">
+                    <button onclick="resetCameraView()">🔄 Reset View</button>
+                    <button onclick="toggleWireframe()">📐 Toggle Wireframe</button>
+                    <button onclick="zoomIn()">🔍+ Zoom In</button>
+                    <button onclick="zoomOut()">🔍- Zoom Out</button>
+                </div>
             </div>
         </div>
 
@@ -946,6 +952,9 @@
             panY: 0
         };
 
+        // Wireframe mode for 3D terrain preview
+        let wireframeMode = false;
+
         // Mouse drag state for camera rotation and panning
         let isDragging = false;
         let isPanning = false;
@@ -1054,6 +1063,34 @@
             }, { passive: false });
         }
 
+        // Reset 3D camera view to default position
+        function resetCameraView() {
+            cameraState.rotationX = 45;
+            cameraState.rotationY = 45;
+            cameraState.zoom = 2.0;
+            cameraState.panX = 0;
+            cameraState.panY = 0;
+            requestAnimationFrame(drawScene);
+        }
+
+        // Toggle wireframe rendering mode
+        function toggleWireframe() {
+            wireframeMode = !wireframeMode;
+            requestAnimationFrame(drawScene);
+        }
+
+        // Zoom in
+        function zoomIn() {
+            cameraState.zoom = Math.max(0.5, cameraState.zoom - 0.2);
+            requestAnimationFrame(drawScene);
+        }
+
+        // Zoom out
+        function zoomOut() {
+            cameraState.zoom = Math.min(5.0, cameraState.zoom + 0.2);
+            requestAnimationFrame(drawScene);
+        }
+
         // Render the 3D terrain scene
         function drawScene() {
             if (!gl || !terrainBuffers) {
@@ -1094,7 +1131,14 @@
 
             // Use UNSIGNED_INT for large meshes (may exceed 65535 vertices)
             // UNSIGNED_SHORT is insufficient for meshes larger than 256x256
-            gl.drawElements(gl.TRIANGLES, terrainBuffers.indexCount, gl.UNSIGNED_INT, 0);
+            // Draw in wireframe mode if enabled
+            if (wireframeMode) {
+                for (let i = 0; i < terrainBuffers.indexCount; i += 3) {
+                    gl.drawElements(gl.LINE_LOOP, 3, gl.UNSIGNED_INT, i * 4);
+                }
+            } else {
+                gl.drawElements(gl.TRIANGLES, terrainBuffers.indexCount, gl.UNSIGNED_INT, 0);
+            }
 
             // Draw start position markers (green cones)
             if (startPositionBuffers && markerShaderProgram) {
