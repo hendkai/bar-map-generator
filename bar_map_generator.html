@@ -462,23 +462,243 @@
                     const index = y * size + x;
                     let sum = 0;
                     let count = 0;
-                    
+
                     for (let dy = -1; dy <= 1; dy++) {
                         for (let dx = -1; dx <= 1; dx++) {
                             sum += data[(y + dy) * size + (x + dx)];
                             count++;
                         }
                     }
-                    
+
                     newData[index] = sum / count;
                 }
             }
-            
+
             for (let i = 0; i < data.length; i++) {
                 data[i] = newData[i];
             }
         }
-        
+
+        // Terrain Analysis Utility Functions
+        function calculateSlope(heightmapData, size) {
+            const slopeData = new Array(size * size);
+
+            for (let y = 1; y < size - 1; y++) {
+                for (let x = 1; x < size - 1; x++) {
+                    const index = y * size + x;
+
+                    const center = heightmapData[index];
+                    const left = heightmapData[y * size + (x - 1)];
+                    const right = heightmapData[y * size + (x + 1)];
+                    const top = heightmapData[(y - 1) * size + x];
+                    const bottom = heightmapData[(y + 1) * size + x];
+
+                    const dzdx = (right - left) / 2;
+                    const dzdy = (bottom - top) / 2;
+
+                    slopeData[index] = Math.sqrt(dzdx * dzdx + dzdy * dzdy);
+                }
+            }
+
+            for (let x = 0; x < size; x++) {
+                slopeData[x] = 0;
+                slopeData[(size - 1) * size + x] = 0;
+            }
+            for (let y = 0; y < size; y++) {
+                slopeData[y * size] = 0;
+                slopeData[y * size + (size - 1)] = 0;
+            }
+
+            return slopeData;
+        }
+
+        function identifyHills(heightmapData, size, waterLevel) {
+            const hills = [];
+            const visited = new Set();
+            const heightThreshold = waterLevel + 80;
+
+            for (let y = 2; y < size - 2; y++) {
+                for (let x = 2; x < size - 2; x++) {
+                    const index = y * size + x;
+                    const height = heightmapData[index];
+
+                    if (height > heightThreshold && !visited.has(index)) {
+                        let isPeak = true;
+                        let neighborCount = 0;
+                        let lowerNeighborCount = 0;
+
+                        for (let dy = -2; dy <= 2; dy++) {
+                            for (let dx = -2; dx <= 2; dx++) {
+                                if (dx === 0 && dy === 0) continue;
+
+                                const neighborIndex = (y + dy) * size + (x + dx);
+                                const neighborHeight = heightmapData[neighborIndex];
+                                neighborCount++;
+
+                                if (neighborHeight >= height) {
+                                    isPeak = false;
+                                } else if (neighborHeight < height - 10) {
+                                    lowerNeighborCount++;
+                                }
+                            }
+                        }
+
+                        if (isPeak || lowerNeighborCount > neighborCount * 0.6) {
+                            const peakIndex = index;
+                            const hill = {
+                                x: x,
+                                y: y,
+                                height: height,
+                                radius: 0
+                            };
+
+                            let maxRadius = 0;
+                            for (let r = 1; r < 15; r++) {
+                                let pointsAtRadius = 0;
+                                let pointsAboveThreshold = 0;
+
+                                for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
+                                    const checkX = Math.round(x + Math.cos(angle) * r);
+                                    const checkY = Math.round(y + Math.sin(angle) * r);
+
+                                    if (checkX >= 0 && checkX < size && checkY >= 0 && checkY < size) {
+                                        pointsAtRadius++;
+                                        const checkHeight = heightmapData[checkY * size + checkX];
+                                        if (checkHeight > waterLevel + 30) {
+                                            pointsAboveThreshold++;
+                                        }
+                                    }
+                                }
+
+                                if (pointsAboveThreshold / pointsAtRadius > 0.5) {
+                                    maxRadius = r;
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            hill.radius = maxRadius;
+                            hills.push(hill);
+
+                            for (let dy = -maxRadius; dy <= maxRadius; dy++) {
+                                for (let dx = -maxRadius; dx <= maxRadius; dx++) {
+                                    const visitX = x + dx;
+                                    const visitY = y + dy;
+                                    if (visitX >= 0 && visitX < size && visitY >= 0 && visitY < size) {
+                                        const dist = Math.sqrt(dx * dx + dy * dy);
+                                        if (dist <= maxRadius) {
+                                            visited.add(visitY * size + visitX);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return hills;
+        }
+
+        function findValleys(heightmapData, size, waterLevel) {
+            const valleys = [];
+            const visited = new Set();
+            const maxHeightThreshold = waterLevel + 50;
+
+            for (let y = 2; y < size - 2; y++) {
+                for (let x = 2; x < size - 2; x++) {
+                    const index = y * size + x;
+                    const height = heightmapData[index];
+
+                    if (height > waterLevel + 5 && height < maxHeightThreshold && !visited.has(index)) {
+                        let isValleyBottom = true;
+                        let neighborCount = 0;
+                        let higherNeighborCount = 0;
+
+                        for (let dy = -2; dy <= 2; dy++) {
+                            for (let dx = -2; dx <= 2; dx++) {
+                                if (dx === 0 && dy === 0) continue;
+
+                                const neighborIndex = (y + dy) * size + (x + dx);
+                                const neighborHeight = heightmapData[neighborIndex];
+                                neighborCount++;
+
+                                if (neighborHeight < height) {
+                                    isValleyBottom = false;
+                                } else if (neighborHeight > height + 10) {
+                                    higherNeighborCount++;
+                                }
+                            }
+                        }
+
+                        if (isValleyBottom || higherNeighborCount > neighborCount * 0.6) {
+                            const valley = {
+                                x: x,
+                                y: y,
+                                height: height,
+                                radius: 0
+                            };
+
+                            let maxRadius = 0;
+                            for (let r = 1; r < 12; r++) {
+                                let pointsAtRadius = 0;
+                                let pointsBelowThreshold = 0;
+
+                                for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
+                                    const checkX = Math.round(x + Math.cos(angle) * r);
+                                    const checkY = Math.round(y + Math.sin(angle) * r);
+
+                                    if (checkX >= 0 && checkX < size && checkY >= 0 && checkY < size) {
+                                        pointsAtRadius++;
+                                        const checkHeight = heightmapData[checkY * size + checkX];
+                                        if (checkHeight < maxHeightThreshold && checkHeight > waterLevel + 5) {
+                                            pointsBelowThreshold++;
+                                        }
+                                    }
+                                }
+
+                                if (pointsBelowThreshold / pointsAtRadius > 0.5) {
+                                    maxRadius = r;
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            valley.radius = maxRadius;
+                            valleys.push(valley);
+
+                            for (let dy = -maxRadius; dy <= maxRadius; dy++) {
+                                for (let dx = -maxRadius; dx <= maxRadius; dx++) {
+                                    const visitX = x + dx;
+                                    const visitY = y + dy;
+                                    if (visitX >= 0 && visitX < size && visitY >= 0 && visitY < size) {
+                                        const dist = Math.sqrt(dx * dx + dy * dy);
+                                        if (dist <= maxRadius) {
+                                            visited.add(visitY * size + visitX);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return valleys;
+        }
+
+        function analyzeTerrain(heightmapData, size, waterLevel) {
+            const slopeData = calculateSlope(heightmapData, size);
+            const hills = identifyHills(heightmapData, size, waterLevel);
+            const valleys = findValleys(heightmapData, size, waterLevel);
+
+            return {
+                slope: slopeData,
+                hills: hills,
+                valleys: valleys
+            };
+        }
+
         function generateTextureMap(size, heightmapData, waterLevel) {
             const textureData = new Array(size * size * 4); // RGBA
             
