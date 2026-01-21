@@ -768,12 +768,81 @@
             return textureData;
         }
         
+        function calculateStrategicScore(x, y, height, terrainAnalysis, size, waterLevel) {
+            let score = 0;
+            const hills = terrainAnalysis.hills;
+            const valleys = terrainAnalysis.valleys;
+
+            // Factor 1: Height advantage (higher is better for metal spots)
+            const normalizedHeight = (height - waterLevel) / 255;
+            score += normalizedHeight * 30;
+
+            // Factor 2: Proximity to hills (closer is better)
+            let minHillDistance = Infinity;
+            for (const hill of hills) {
+                const dist = Math.sqrt((x - hill.x) ** 2 + (y - hill.y) ** 2);
+                if (dist < minHillDistance) {
+                    minHillDistance = dist;
+                }
+            }
+
+            if (minHillDistance !== Infinity) {
+                // Score decreases with distance from hills
+                const normalizedDist = Math.min(minHillDistance / (size * 0.15), 1);
+                score += (1 - normalizedDist) * 40;
+            }
+
+            // Factor 3: Ridge positioning (between two hills is strategic)
+            let ridgeScore = 0;
+            for (let i = 0; i < hills.length; i++) {
+                for (let j = i + 1; j < hills.length; j++) {
+                    const hill1 = hills[i];
+                    const hill2 = hills[j];
+
+                    // Check if position lies approximately on the line between hills
+                    const dist1 = Math.sqrt((x - hill1.x) ** 2 + (y - hill1.y) ** 2);
+                    const dist2 = Math.sqrt((x - hill2.x) ** 2 + (y - hill2.y) ** 2);
+                    const hillDist = Math.sqrt((hill1.x - hill2.x) ** 2 + (hill1.y - hill2.y) ** 2);
+
+                    if (Math.abs(dist1 + dist2 - hillDist) < 20) {
+                        // Position is on ridge between hills
+                        ridgeScore = Math.max(ridgeScore, 25);
+                    }
+                }
+            }
+            score += ridgeScore;
+
+            // Factor 4: Avoid deep valleys (penalty)
+            let minValleyDistance = Infinity;
+            for (const valley of valleys) {
+                const dist = Math.sqrt((x - valley.x) ** 2 + (y - valley.y) ** 2);
+                if (dist < minValleyDistance) {
+                    minValleyDistance = dist;
+                }
+            }
+
+            if (minValleyDistance !== Infinity && minValleyDistance < size * 0.08) {
+                // Penalty for being in or very near a valley
+                const normalizedValleyDist = minValleyDistance / (size * 0.08);
+                score -= (1 - normalizedValleyDist) * 15;
+            }
+
+            // Add some randomness to prevent predictable patterns
+            score += Math.random() * 10;
+
+            return Math.max(0, score);
+        }
+
         function generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount) {
             const resourceData = {
                 metalSpots: [],
                 geoSpots: [],
                 size: size
             };
+
+            // Analyze terrain for strategic features
+            const terrainAnalysis = analyzeTerrain(heightmapData, size, waterLevel);
+            console.log(`Strategic Placement: Found ${terrainAnalysis.hills.length} hills, ${terrainAnalysis.valleys.length} valleys`);
 
             // Generate start positions for territory division
             const startPositions = generateStartPositions(size, playerCount, heightmapData, waterLevel);
@@ -794,29 +863,32 @@
                 // Calculate spots for this player (some get +1 for balance)
                 const spotsForPlayer = baseSpotsPerPlayer + (player < extraSpots ? 1 : 0);
 
-                // Collect valid positions within this player's territory
-                const validPositions = [];
+                // Collect and score valid positions within this player's territory
+                const scoredPositions = [];
                 for (let y = 0; y < size; y++) {
                     for (let x = 0; x < size; x++) {
                         const index = y * size + x;
                         if (territories[index] === player) {
                             const height = heightmapData[index];
                             if (height > waterLevel + 10) {
-                                validPositions.push({ x, y });
+                                const score = calculateStrategicScore(x, y, height, terrainAnalysis, size, waterLevel);
+                                scoredPositions.push({ x, y, score });
                             }
                         }
                     }
                 }
 
-                // Place metal spots randomly within territory
-                for (let i = 0; i < spotsForPlayer && validPositions.length > 0; i++) {
-                    let attempts = 0;
-                    let validSpot = false;
+                // Sort positions by strategic score (descending)
+                scoredPositions.sort((a, b) => b.score - a.score);
 
-                    while (!validSpot && attempts < 100 && validPositions.length > 0) {
-                        // Pick random position from territory
-                        const posIndex = Math.floor(Math.random() * validPositions.length);
-                        const { x, y } = validPositions[posIndex];
+                // Place metal spots strategically (prefer high-scoring positions)
+                for (let i = 0; i < spotsForPlayer && scoredPositions.length > 0; i++) {
+                    let placedSpot = false;
+                    let searchIndex = 0;
+
+                    // Try to place from highest-scoring positions first
+                    while (!placedSpot && searchIndex < scoredPositions.length) {
+                        const { x, y } = scoredPositions[searchIndex];
                         const height = heightmapData[y * size + x];
 
                         // Check distance from other metal spots
@@ -837,12 +909,10 @@
                                 territory: player
                             });
                             spotsPerTerritory[player]++;
-                            validSpot = true;
+                            placedSpot = true;
                         }
 
-                        // Remove used position to avoid repeats
-                        validPositions.splice(posIndex, 1);
-                        attempts++;
+                        searchIndex++;
                     }
                 }
             }
