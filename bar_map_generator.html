@@ -612,6 +612,81 @@
             panY: 0
         };
 
+        // Mouse drag state for camera rotation
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        // Initialize camera controls
+        function initCameraControls() {
+            const canvas = document.getElementById('terrain3dCanvas');
+
+            canvas.addEventListener('mousedown', function(e) {
+                isDragging = true;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+            });
+
+            canvas.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+
+                const deltaX = e.clientX - lastMouseX;
+                const deltaY = e.clientY - lastMouseY;
+
+                // Update rotation angles (sensitivity: 0.5 degrees per pixel)
+                cameraState.rotationY += deltaX * 0.5;
+                cameraState.rotationX += deltaY * 0.5;
+
+                // Clamp vertical rotation to prevent flipping
+                cameraState.rotationX = Math.max(10, Math.min(90, cameraState.rotationX));
+
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+
+                // Request redraw
+                requestAnimationFrame(drawScene);
+            });
+
+            canvas.addEventListener('mouseup', function() {
+                isDragging = false;
+            });
+
+            canvas.addEventListener('mouseleave', function() {
+                isDragging = false;
+            });
+
+            // Touch support for mobile devices
+            canvas.addEventListener('touchstart', function(e) {
+                if (e.touches.length === 1) {
+                    isDragging = true;
+                    lastMouseX = e.touches[0].clientX;
+                    lastMouseY = e.touches[0].clientY;
+                    e.preventDefault();
+                }
+            });
+
+            canvas.addEventListener('touchmove', function(e) {
+                if (!isDragging || e.touches.length !== 1) return;
+
+                const deltaX = e.touches[0].clientX - lastMouseX;
+                const deltaY = e.touches[0].clientY - lastMouseY;
+
+                cameraState.rotationY += deltaX * 0.5;
+                cameraState.rotationX += deltaY * 0.5;
+                cameraState.rotationX = Math.max(10, Math.min(90, cameraState.rotationX));
+
+                lastMouseX = e.touches[0].clientX;
+                lastMouseY = e.touches[0].clientY;
+
+                requestAnimationFrame(drawScene);
+                e.preventDefault();
+            });
+
+            canvas.addEventListener('touchend', function() {
+                isDragging = false;
+            });
+        }
+
         // Render the 3D terrain scene
         function drawScene() {
             if (!gl || !terrainBuffers) {
@@ -3150,6 +3225,7 @@ return {}`;
         window.addEventListener('load', function() {
             updateValueDisplays();
             initWebGL();
+            initCameraControls();
         });
     </script>
 </body>

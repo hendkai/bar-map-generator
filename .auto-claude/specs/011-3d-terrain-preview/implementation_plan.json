@@ -135,7 +135,7 @@
             "type": "manual",
             "instructions": "Verify terrain renders in 3D perspective when map is generated"
           },
-          "status": "pending"
+          "status": "completed"
         }
       ]
     },
@@ -445,5 +445,5 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-01-21T19:37:15.595Z"
+  "updated_at": "2026-01-21T19:40:41.206Z"
 }
