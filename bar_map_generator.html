@@ -2338,6 +2338,37 @@ https://github.com/beyond-all-reason/bar-map-generator
             };
         }
 
+        /**
+         * Test helper function to verify validateAllBARAssets works correctly
+         * Call this from browser console to test the master validation function
+         */
+        async function testValidateAllBARAssets() {
+            // First generate some assets to test with
+            const originalSize = mapConfig.size;
+            mapConfig.size = 1024; // Set to 1024x1024 (16 mapUnits)
+
+            // Generate a simple heightmap
+            generateHeightmap();
+            const barAssets = generateBARAssets();
+            const mapUnits = 16;
+
+            // Run validation
+            const result = await validateAllBARAssets(barAssets, mapUnits);
+            console.log('=== validateAllBARAssets Test Results ===');
+            console.log('All Pass:', result.allPass);
+            console.log('Summary:', result.summary);
+            console.log('Timestamp:', result.timestamp);
+            console.log('Detailed Results:', result.results);
+
+            // Expected: allPass should be true, all 9 assets should pass
+            // Each result should have: asset, pass, dimensions, format, errors
+            // dimensions should include pass, actual, expected, message
+            // format should include pass, expected, actual, message
+
+            mapConfig.size = originalSize; // Restore original size
+            return result;
+        }
+
         function generateBARHeightmap() {
             const size = mapConfig.size;
             const mapUnits = size / 64;
