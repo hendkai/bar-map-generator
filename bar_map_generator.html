@@ -938,6 +938,101 @@
             reader.readAsText(file);
         }
 
+        function importConfigFromText() {
+            const textArea = document.getElementById('configTextInput');
+            const base64String = textArea.value.trim();
+
+            if (!base64String) {
+                alert('Please paste a configuration string into the text area first!');
+                return;
+            }
+
+            try {
+                // Decode base64 string
+                const jsonString = atob(base64String);
+
+                // Parse JSON
+                const importData = JSON.parse(jsonString);
+
+                // Validate structure
+                if (!importData.version || !importData.config) {
+                    throw new Error('Invalid configuration format. Missing version or config data.');
+                }
+
+                // Check version compatibility
+                if (importData.version !== '1.0') {
+                    alert('Warning: This configuration was created with a different version (v' + importData.version + '). Some settings may not work correctly.');
+                }
+
+                const config = importData.config;
+
+                // Apply all configuration values to form elements
+                if (config.size !== undefined) {
+                    document.getElementById('mapSize').value = config.size;
+                }
+                if (config.terrainType !== undefined) {
+                    document.getElementById('terrainType').value = config.terrainType;
+                }
+                if (config.playerCount !== undefined) {
+                    document.getElementById('playerCount').value = config.playerCount;
+                }
+                if (config.noiseStrength !== undefined) {
+                    document.getElementById('noiseStrength').value = config.noiseStrength;
+                }
+                if (config.heightVariation !== undefined) {
+                    document.getElementById('heightVariation').value = config.heightVariation;
+                }
+                if (config.waterLevel !== undefined) {
+                    document.getElementById('waterLevel').value = config.waterLevel;
+                }
+                if (config.metalSpots !== undefined) {
+                    document.getElementById('metalSpots').value = config.metalSpots;
+                }
+                if (config.metalStrength !== undefined) {
+                    document.getElementById('metalStrength').value = config.metalStrength;
+                }
+                if (config.geoSpots !== undefined) {
+                    document.getElementById('geoSpots').value = config.geoSpots;
+                }
+
+                // Apply metadata
+                if (importData.metadata) {
+                    if (importData.metadata.creator) {
+                        document.getElementById('creatorName').value = importData.metadata.creator;
+                    }
+                    if (importData.metadata.description) {
+                        document.getElementById('mapDescription').value = importData.metadata.description;
+                    }
+                }
+
+                // Update value displays
+                updateValueDisplays();
+
+                // Update mapConfig object
+                mapConfig = { ...config };
+
+                // Show success message with details
+                const timestamp = importData.timestamp ? new Date(importData.timestamp).toLocaleString() : 'Unknown';
+                alert('Configuration imported successfully!\n\n' +
+                      'Creator: ' + (importData.metadata?.creator || 'Anonymous') + '\n' +
+                      'Description: ' + (importData.metadata?.description || 'No description') + '\n' +
+                      'Exported: ' + timestamp + '\n\n' +
+                      'Click "Generate Map" to generate the map with these settings.');
+
+                // Clear the textarea after successful import
+                textArea.value = '';
+
+            } catch (error) {
+                if (error instanceof SyntaxError) {
+                    alert('Error parsing configuration: The text is not valid base64-encoded JSON.\n\nPlease make sure you copied the entire configuration string.');
+                } else if (error.name === 'InvalidCharacterError') {
+                    alert('Error decoding configuration: The text contains invalid characters.\n\nPlease make sure you pasted the complete configuration string without any extra spaces or line breaks.');
+                } else {
+                    alert('Error importing configuration: ' + error.message);
+                }
+            }
+        }
+
         // COMPLETE BAR MAP PACKAGE GENERATION
         async function downloadCompleteMapPackage() {
             if (!heightmapData) {
