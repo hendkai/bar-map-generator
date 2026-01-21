@@ -223,7 +223,7 @@
             "type": "manual",
             "instructions": "Generate map and verify green markers appear at start positions in 3D view"
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-5-2",
@@ -445,5 +445,5 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-01-21T19:51:30.428Z"
+  "updated_at": "2026-01-21T19:55:34.365Z"
 }

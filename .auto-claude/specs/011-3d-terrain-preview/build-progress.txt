@@ -310,3 +310,101 @@ Next Steps:
   * 6-3: Add UI controls for 3D viewer
 
 === END SUBTASK 4-3 ===
+
+=== SESSION 6 - Subtask 5-1 Implementation ===
+Date: 2026-01-21
+Task: Create start position markers (3D cones or cylinders)
+
+Implementation Details:
+- Added markerBuffers and markerShaderProgram global variables
+- Created createMarkerShaderProgram() function:
+  * Simple solid-color vertex/fragment shader pair
+  * Takes uniform color parameter for marker rendering
+  * No height-based coloring (unlike terrain shader)
+- Initialized marker shader in initWebGL():
+  * Gets attribute and uniform locations
+  * Enables vertex attribute array
+- Created generateConeMesh(x, y, z, radius, height) function:
+  * Generates cone geometry with 16 segments
+  * Tip at top, base circle at bottom
+  * Returns vertices and indices arrays
+- Created generateMarkerMeshes(startPositions, heightmap, size, waterLevel) function:
+  * Iterates through all start positions
+  * Gets height at each position from heightmap
+  * Converts map coordinates to terrain coordinates
+  * Generates cone mesh for each position
+  * Combines all marker geometry into single mesh
+  * Uses size-based scaling (radius = size * 0.01, height = size * 0.02)
+- Created uploadMarkerDataToBuffers(mesh) function:
+  * Creates position and index buffers
+  * Uploads marker geometry to WebGL
+  * Returns buffer object for rendering
+- Updated drawScene() function:
+  * After rendering terrain, switches to marker shader
+  * Sets green color (0.267, 1.0, 0.267) matching 2D preview
+  * Binds marker buffers and draws cones
+  * Switches back to terrain shader
+- Updated generateMap() function:
+  * Generates marker meshes from start positions
+  * Uploads marker buffers after terrain buffers
+  * Markers render automatically when terrain is generated
+
+Technical Details:
+- Cone geometry: 17 vertices (1 tip + 16 base), 48 triangles
+- Green color RGB(0.267, 1.0, 0.267) matches 2D preview color #44ff44
+- Marker size scales with map size (1% radius, 2% height of map dimension)
+- Markers positioned at terrain surface height
+- Separate shader avoids height-based coloring interference
+- Markers use same model-view matrix as terrain (shared camera)
+
+Code Quality:
+✓ Follows existing WebGL buffer and shader pattern
+✓ Consistent with 2D marker rendering (green color)
+✓ Efficient single draw call for all markers
+✓ Proper error handling (null checks)
+✓ No console.log debugging statements
+✓ Clean integration with existing rendering pipeline
+
+Files Modified:
+- bar_map_generator.html (added ~199 lines)
+
+Verification:
+- Manual testing required:
+  1. Open bar_map_generator.html in browser
+  2. Click "Generate Map" button
+  3. Verify 3D terrain renders with green cone markers
+  4. Markers should appear at start positions (matching 2D preview)
+  5. Markers should be green color (#44ff44 equivalent)
+  6. Rotate/zoom/pan to verify markers stick to terrain surface
+
+User Experience:
+- Visual confirmation of player start positions in 3D view
+- Matches 2D resource preview marker color for consistency
+- Cone shape clearly visible from any angle
+- Markers scale appropriately with map size
+- All camera controls work with markers (rotate, zoom, pan)
+
+Integration Notes:
+- Uses existing mapConfig.startPositions array
+- Reads heightmap data for correct vertical placement
+- No changes to start position generation logic
+- Markers render after terrain (proper depth testing)
+- Separate shader prevents color interference with terrain
+
+Phase Status:
+✓ Subtask 5-1: Start position markers (completed)
+○ Subtask 5-2: Metal spot markers (pending)
+○ Subtask 5-3: Geothermal spot markers (pending)
+
+Next Steps:
+- Subtask 5-2: Create metal spot markers (yellow spheres)
+  * Similar approach to start position markers
+  * Use spherical geometry instead of cones
+  * Yellow color matching 2D preview (#ffdd00)
+  * Position at resourceData.metalSpots locations
+- Subtask 5-3: Create geothermal spot markers (red spheres)
+  * Similar to metal spot markers
+  * Red color matching 2D preview (#ff4444)
+  * Position at resourceData.geoSpots locations
+
+=== END SUBTASK 5-1 ===

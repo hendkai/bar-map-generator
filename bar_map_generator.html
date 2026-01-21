@@ -284,7 +284,8 @@
         let gl;
         let shaderProgram;
         let terrainBuffers;
-        let markerBuffers;
+        let startPositionBuffers;
+        let metalSpotBuffers;
         let markerShaderProgram;
 
         // Initialize WebGL context and shaders
@@ -599,8 +600,52 @@
             };
         }
 
-        // Generate marker meshes for all start positions
-        function generateMarkerMeshes(startPositions, heightmap, size, waterLevel) {
+        function generateSphereMesh(x, y, z, radius) {
+            const vertices = [];
+            const indices = [];
+            const latSegments = 8;
+            const lonSegments = 16;
+
+            // Generate vertices
+            for (let lat = 0; lat <= latSegments; lat++) {
+                const theta = (lat * Math.PI) / latSegments;
+                const sinTheta = Math.sin(theta);
+                const cosTheta = Math.cos(theta);
+
+                for (let lon = 0; lon <= lonSegments; lon++) {
+                    const phi = (lon * 2 * Math.PI) / lonSegments;
+                    const sinPhi = Math.sin(phi);
+                    const cosPhi = Math.cos(phi);
+
+                    const px = x + radius * sinTheta * cosPhi;
+                    const py = y + radius * cosTheta;
+                    const pz = z + radius * sinTheta * sinPhi;
+
+                    vertices.push(px, py, pz);
+                }
+            }
+
+            // Generate indices
+            for (let lat = 0; lat < latSegments; lat++) {
+                for (let lon = 0; lon < lonSegments; lon++) {
+                    const first = lat * (lonSegments + 1) + lon;
+                    const second = first + lonSegments + 1;
+
+                    indices.push(first, second, first + 1);
+                    indices.push(second, second + 1, first + 1);
+                }
+            }
+
+            return {
+                vertices: new Float32Array(vertices),
+                indices: new Uint16Array(indices),
+                vertexCount: vertices.length / 3,
+                indexCount: indices.length
+            };
+        }
+
+        // Generate marker meshes for start positions (green cones)
+        function generateStartPositionMeshes(startPositions, heightmap, size, waterLevel) {
             const allVertices = [];
             const allIndices = [];
             let totalVertices = 0;
@@ -638,6 +683,53 @@
 
                 totalVertices += cone.vertexCount;
                 totalIndices += cone.indexCount;
+            });
+
+            return {
+                vertices: new Float32Array(allVertices),
+                indices: new Uint16Array(allIndices),
+                vertexCount: totalVertices,
+                indexCount: totalIndices
+            };
+        }
+
+        // Generate marker meshes for metal spots (yellow spheres)
+        function generateMetalSpotMeshes(metalSpots, heightmap, size, waterLevel) {
+            const allVertices = [];
+            const allIndices = [];
+            let totalVertices = 0;
+            let totalIndices = 0;
+
+            const sphereRadius = size * 0.008;
+
+            metalSpots.forEach((pos) => {
+                const height = heightmap[pos.y * size + pos.x];
+                const normalizedHeight = height / 255.0;
+
+                // Convert map coordinates to terrain coordinates
+                const terrainX = (pos.x / (size - 1)) * 2.0 - 1.0;
+                const terrainZ = (pos.y / (size - 1)) * 2.0 - 1.0;
+                const terrainY = normalizedHeight + sphereRadius;
+
+                const sphere = generateSphereMesh(
+                    terrainX,
+                    terrainY,
+                    terrainZ,
+                    sphereRadius
+                );
+
+                const vertexOffset = totalVertices;
+
+                for (let i = 0; i < sphere.vertices.length; i++) {
+                    allVertices.push(sphere.vertices[i]);
+                }
+
+                for (let i = 0; i < sphere.indices.length; i++) {
+                    allIndices.push(sphere.indices[i] + vertexOffset);
+                }
+
+                totalVertices += sphere.vertexCount;
+                totalIndices += sphere.indexCount;
             });
 
             return {
@@ -935,8 +1027,8 @@
 
             gl.drawElements(gl.TRIANGLES, terrainBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
 
-            // Draw start position markers
-            if (markerBuffers && markerShaderProgram) {
+            // Draw start position markers (green cones)
+            if (startPositionBuffers && markerShaderProgram) {
                 gl.useProgram(markerShaderProgram);
 
                 gl.uniformMatrix4fv(markerShaderProgram.pMatrixUniform, false, projectionMatrix);
@@ -945,12 +1037,30 @@
                 // Green color for start positions (matching 2D preview)
                 gl.uniform3f(markerShaderProgram.colorUniform, 0.267, 1.0, 0.267);
 
-                gl.bindBuffer(gl.ARRAY_BUFFER, markerBuffers.position);
+                gl.bindBuffer(gl.ARRAY_BUFFER, startPositionBuffers.position);
                 gl.vertexAttribPointer(markerShaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
 
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, markerBuffers.indices);
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, startPositionBuffers.indices);
 
-                gl.drawElements(gl.TRIANGLES, markerBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
+                gl.drawElements(gl.TRIANGLES, startPositionBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
+            }
+
+            // Draw metal spot markers (yellow spheres)
+            if (metalSpotBuffers && markerShaderProgram) {
+                gl.useProgram(markerShaderProgram);
+
+                gl.uniformMatrix4fv(markerShaderProgram.pMatrixUniform, false, projectionMatrix);
+                gl.uniformMatrix4fv(markerShaderProgram.mvMatrixUniform, false, modelViewMatrix);
+
+                // Yellow color for metal spots (matching 2D preview)
+                gl.uniform3f(markerShaderProgram.colorUniform, 1.0, 1.0, 0.0);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, metalSpotBuffers.position);
+                gl.vertexAttribPointer(markerShaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, metalSpotBuffers.indices);
+
+                gl.drawElements(gl.TRIANGLES, metalSpotBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
 
                 gl.useProgram(shaderProgram);
             }
@@ -1019,7 +1129,8 @@
                 metalSpots: metalSpots,
                 metalStrength: metalStrength,
                 geoSpots: geoSpots,
-                startPositions: generateStartPositions(size, playerCount, heightmapData, waterLevel)
+                startPositions: generateStartPositions(size, playerCount, heightmapData, waterLevel),
+                metalSpotLocations: resourceData.metalSpots
             };
             
             console.log("All data generated successfully");
@@ -1040,9 +1151,13 @@
                 const mesh = generateTerrainMesh(heightmapData, size);
                 terrainBuffers = uploadMeshDataToBuffers(mesh);
                 if (terrainBuffers) {
-                    // Generate and upload start position markers
-                    const markerMesh = generateMarkerMeshes(mapConfig.startPositions, heightmapData, size, waterLevel);
-                    markerBuffers = uploadMarkerDataToBuffers(markerMesh);
+                    // Generate and upload start position markers (green cones)
+                    const startPositionMesh = generateStartPositionMeshes(mapConfig.startPositions, heightmapData, size, waterLevel);
+                    startPositionBuffers = uploadMarkerDataToBuffers(startPositionMesh);
+
+                    // Generate and upload metal spot markers (yellow spheres)
+                    const metalSpotMesh = generateMetalSpotMeshes(mapConfig.metalSpotLocations, heightmapData, size, waterLevel);
+                    metalSpotBuffers = uploadMarkerDataToBuffers(metalSpotMesh);
 
                     startRenderLoop();
                     console.log("3D terrain rendering started");
