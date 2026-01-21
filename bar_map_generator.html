@@ -309,10 +309,44 @@
             // Generate all data
             heightmapData = generateHeightmap(size, terrainType, noiseStrength, heightVariation, waterLevel, smoothing);
             textureData = generateTextureMap(size, heightmapData, waterLevel);
-            resourceData = generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount);
+
+            // Auto-retry logic for balanced resource distribution
+            const minFairnessScore = 80;
+            const maxRetries = 10;
+            let balance;
+            let retryCount = 0;
+
+            console.log(`\n=== RESOURCE GENERATION WITH AUTO-RETRY ===`);
+            console.log(`Target Fairness Score: ${minFairnessScore}%`);
+            console.log(`Maximum Retry Attempts: ${maxRetries}`);
+
+            do {
+                if (retryCount > 0) {
+                    console.log(`\n🔄 Retry attempt ${retryCount}/${maxRetries}...`);
+                }
+
+                resourceData = generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount);
+                balance = calculateResourceBalance(resourceData, playerCount);
+                retryCount++;
+
+                console.log(`Attempt ${retryCount}: Fairness Score = ${balance.summary.overallFairness}/100`);
+
+                if (parseFloat(balance.summary.overallFairness) >= minFairnessScore) {
+                    console.log(`✅ Target fairness score achieved!`);
+                    break;
+                } else if (retryCount < maxRetries) {
+                    console.log(`⚠️  Fairness score below ${minFairnessScore}%, regenerating...`);
+                }
+            } while (retryCount < maxRetries && parseFloat(balance.summary.overallFairness) < minFairnessScore);
+
+            if (retryCount === maxRetries && parseFloat(balance.summary.overallFairness) < minFairnessScore) {
+                console.log(`⚠️  Warning: Could not achieve target fairness score after ${maxRetries} attempts`);
+                console.log(`Using best attempt: ${balance.summary.overallFairness}/100`);
+            } else {
+                console.log(`✅ Fair distribution achieved in ${retryCount} attempt${retryCount > 1 ? 's' : ''}`);
+            }
 
             // Calculate and log resource balance
-            const balance = calculateResourceBalance(resourceData, playerCount);
             console.log('\n=== RESOURCE BALANCE ANALYSIS ===');
             console.log('Per-Player Resource Totals:');
             balance.perPlayer.forEach(p => {
