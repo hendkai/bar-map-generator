@@ -408,3 +408,109 @@ Next Steps:
   * Position at resourceData.geoSpots locations
 
 === END SUBTASK 5-1 ===
+
+=== SESSION 7 - Subtask 5-2 Implementation ===
+Date: 2026-01-21
+Task: Create metal spot markers (yellow spheres)
+
+Implementation Details:
+- Created generateSphereMesh(x, y, z, radius) function:
+  * Generates sphere geometry using latitude/longitude segments
+  * 8 latitude segments, 16 longitude segments for efficiency
+  * Returns vertices and indices arrays
+  * Uses spherical coordinate math for vertex positioning
+- Refactored marker generation into two separate functions:
+  * generateStartPositionMeshes(): Handles green cone markers
+  * generateMetalSpotMeshes(): Handles yellow sphere markers
+  * This separation allows different colors and shapes per marker type
+- Updated global buffer variables:
+  * Changed single markerBuffers to startPositionBuffers and metalSpotBuffers
+  * Allows independent rendering with different colors
+- Updated mapConfig to include metalSpotLocations:
+  * Stores resourceData.metalSpots for 3D rendering access
+  * Includes x, y, value for each metal spot
+- Modified drawScene() function:
+  * Draws start positions with green color (0.267, 1.0, 0.267)
+  * Draws metal spots with yellow color (1.0, 1.0, 0.0)
+  * Uses separate draw calls for each marker type
+  * Maintains proper shader program switching
+- Updated generateMap() function:
+  * Generates start position meshes separately
+  * Generates metal spot meshes separately
+  * Uploads each to their respective buffers
+  * Both render automatically when terrain is generated
+
+Technical Details:
+- Sphere geometry: 153 vertices (9 lat * 17 lon), 768 triangles (8 * 16 * 2 * 3)
+- Yellow color RGB(1.0, 1.0, 0.0) matches 2D preview color #ffff00
+- Sphere radius = size * 0.008 (slightly smaller than cone base)
+- Metal spots positioned at terrain surface height + radius (sits on surface)
+- Spherical shape clearly distinguishes metal from start positions (cones)
+- Separate buffer approach allows easy addition of geothermal markers next
+
+Code Quality:
+✓ Follows existing WebGL buffer and shader pattern
+✓ Consistent with 2D marker rendering (yellow color)
+✓ Efficient geometry (minimal segments for good performance)
+✓ Proper error handling (null checks for each buffer)
+✓ No console.log debugging statements
+✓ Clean separation of marker types for extensibility
+
+Files Modified:
+- bar_map_generator.html (added ~127 lines, refactored existing marker code)
+
+Verification:
+- Manual testing required:
+  1. Open bar_map_generator.html in browser
+  2. Click "Generate Map" button
+  3. Verify 3D terrain renders with green cones (start positions) AND yellow spheres (metal spots)
+  4. Metal spots should be more numerous than start positions (15-40 vs 2-8)
+  5. Metal spots should be yellow color (#ffff00 equivalent)
+  6. Metal spots should be spherical (different from cone start positions)
+  7. Rotate/zoom/pan to verify markers stick to terrain surface
+  8. Verify metal spots appear in different locations than start positions
+
+User Experience:
+- Visual confirmation of metal resources in 3D view
+- Matches 2D resource preview marker color for consistency
+- Sphere shape clearly distinguishes from start position cones
+- Yellow color indicates metal resource (standard convention)
+- All camera controls work with markers (rotate, zoom, pan)
+
+Integration Notes:
+- Uses existing resourceData.metalSpots array
+- Reads heightmap data for correct vertical placement
+- No changes to metal spot generation logic
+- Markers render after terrain (proper depth testing)
+- Separate buffers allow independent color control
+- Ready for subtask 5-3 (geothermal markers) using same pattern
+
+Design Decisions:
+- Chose separate functions over single combined function:
+  * Cleaner code organization
+  * Easier to modify one marker type without affecting other
+  * Supports future marker types
+  * Allows independent buffer management
+- Sphere geometry uses 8x16 segments:
+  * Balance between visual quality and performance
+  * Sufficient for small markers (0.8% of map size)
+  * Scales well with multiple metal spots (15-40 markers)
+- Yellow color RGB(1.0, 1.0, 0.0):
+  * Pure yellow for high visibility
+  * Matches standard RTS metal resource conventions
+  * High contrast against green terrain and blue water
+
+Phase Status:
+✓ Subtask 5-1: Start position markers (completed)
+✓ Subtask 5-2: Metal spot markers (completed)
+○ Subtask 5-3: Geothermal spot markers (pending)
+
+Next Steps:
+- Subtask 5-3: Create geothermal spot markers (red spheres)
+  * Follow same pattern as metal spot markers
+  * Red color matching 2D preview (#ff4444)
+  * Position at resourceData.geoSpots locations
+  * Spherical shape like metal spots (different color only)
+  * Will complete Phase 5 (Marker Rendering)
+
+=== END SUBTASK 5-2 ===

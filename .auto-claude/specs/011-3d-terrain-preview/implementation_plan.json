@@ -238,7 +238,7 @@
             "type": "manual",
             "instructions": "Verify yellow spherical markers appear at metal locations"
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-5-3",
@@ -445,5 +445,5 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-01-21T19:55:34.365Z"
+  "updated_at": "2026-01-21T20:03:37.999Z"
 }
