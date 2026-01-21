@@ -612,8 +612,9 @@
             panY: 0
         };
 
-        // Mouse drag state for camera rotation
+        // Mouse drag state for camera rotation and panning
         let isDragging = false;
+        let isPanning = false;
         let lastMouseX = 0;
         let lastMouseY = 0;
 
@@ -623,6 +624,8 @@
 
             canvas.addEventListener('mousedown', function(e) {
                 isDragging = true;
+                // Check for right-click (button 2) or shift key for panning
+                isPanning = (e.button === 2) || e.shiftKey;
                 lastMouseX = e.clientX;
                 lastMouseY = e.clientY;
             });
@@ -633,12 +636,19 @@
                 const deltaX = e.clientX - lastMouseX;
                 const deltaY = e.clientY - lastMouseY;
 
-                // Update rotation angles (sensitivity: 0.5 degrees per pixel)
-                cameraState.rotationY += deltaX * 0.5;
-                cameraState.rotationX += deltaY * 0.5;
+                if (isPanning) {
+                    // Update pan position (sensitivity: 0.5 units per pixel)
+                    const panSpeed = 0.5;
+                    cameraState.panX += deltaX * panSpeed;
+                    cameraState.panY -= deltaY * panSpeed;
+                } else {
+                    // Update rotation angles (sensitivity: 0.5 degrees per pixel)
+                    cameraState.rotationY += deltaX * 0.5;
+                    cameraState.rotationX += deltaY * 0.5;
 
-                // Clamp vertical rotation to prevent flipping
-                cameraState.rotationX = Math.max(10, Math.min(90, cameraState.rotationX));
+                    // Clamp vertical rotation to prevent flipping
+                    cameraState.rotationX = Math.max(10, Math.min(90, cameraState.rotationX));
+                }
 
                 lastMouseX = e.clientX;
                 lastMouseY = e.clientY;
@@ -649,10 +659,18 @@
 
             canvas.addEventListener('mouseup', function() {
                 isDragging = false;
+                isPanning = false;
             });
 
             canvas.addEventListener('mouseleave', function() {
                 isDragging = false;
+                isPanning = false;
+            });
+
+            // Prevent context menu on right-click
+            canvas.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
             });
 
             // Touch support for mobile devices
