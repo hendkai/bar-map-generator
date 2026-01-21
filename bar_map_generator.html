@@ -862,6 +862,68 @@
             }
         }
 
+        // Validation function for configuration values
+        function validateConfigurationValues(config) {
+            // Valid map sizes
+            const validMapSizes = ['512', '1024', '2048'];
+            const validTerrainTypes = ['continental', 'islands', 'canyon', 'hills', 'flat'];
+            const validPlayerCounts = ['2', '4', '6', '8'];
+
+            // Validate mapSize
+            if (config.size !== undefined) {
+                if (typeof config.size !== 'string' && typeof config.size !== 'number') {
+                    throw new Error('Invalid configuration: map size must be a string or number.');
+                }
+                const sizeStr = String(config.size);
+                if (!validMapSizes.includes(sizeStr)) {
+                    throw new Error('Invalid configuration: map size must be 512, 1024, or 2048. Got: ' + sizeStr);
+                }
+            }
+
+            // Validate terrainType
+            if (config.terrainType !== undefined) {
+                if (typeof config.terrainType !== 'string') {
+                    throw new Error('Invalid configuration: terrain type must be a string.');
+                }
+                if (!validTerrainTypes.includes(config.terrainType)) {
+                    throw new Error('Invalid configuration: terrain type must be one of: ' + validTerrainTypes.join(', ') + '. Got: ' + config.terrainType);
+                }
+            }
+
+            // Validate playerCount
+            if (config.playerCount !== undefined) {
+                if (typeof config.playerCount !== 'string' && typeof config.playerCount !== 'number') {
+                    throw new Error('Invalid configuration: player count must be a string or number.');
+                }
+                const playerStr = String(config.playerCount);
+                if (!validPlayerCounts.includes(playerStr)) {
+                    throw new Error('Invalid configuration: player count must be 2, 4, 6, or 8. Got: ' + playerStr);
+                }
+            }
+
+            // Validate numeric ranges
+            const numericFields = [
+                { name: 'noiseStrength', min: 0, max: 1 },
+                { name: 'heightVariation', min: 0, max: 1 },
+                { name: 'waterLevel', min: 0, max: 1 },
+                { name: 'metalSpots', min: 0, max: 100 },
+                { name: 'metalStrength', min: 0, max: 1 },
+                { name: 'geoSpots', min: 0, max: 50 }
+            ];
+
+            for (const field of numericFields) {
+                if (config[field.name] !== undefined) {
+                    const value = Number(config[field.name]);
+                    if (isNaN(value)) {
+                        throw new Error('Invalid configuration: ' + field.name + ' must be a valid number. Got: ' + config[field.name]);
+                    }
+                    if (value < field.min || value > field.max) {
+                        throw new Error('Invalid configuration: ' + field.name + ' must be between ' + field.min + ' and ' + field.max + '. Got: ' + value);
+                    }
+                }
+            }
+        }
+
         function importConfigFromFile() {
             const fileInput = document.getElementById('configFileInput');
             const file = fileInput.files[0];
@@ -882,11 +944,35 @@
             reader.onload = function(e) {
                 try {
                     const jsonContent = e.target.result;
-                    const importData = JSON.parse(jsonContent);
+
+                    // Check if file is empty
+                    if (!jsonContent || jsonContent.trim() === '') {
+                        throw new Error('The file is empty. Please select a valid configuration file.');
+                    }
+
+                    // Try to parse JSON
+                    let importData;
+                    try {
+                        importData = JSON.parse(jsonContent);
+                    } catch (parseError) {
+                        if (parseError instanceof SyntaxError) {
+                            throw new Error('The file is not valid JSON.\n\nDetails: ' + parseError.message);
+                        }
+                        throw parseError;
+                    }
 
                     // Validate structure
+                    if (!importData || typeof importData !== 'object') {
+                        throw new Error('Invalid configuration file format. The content must be a valid JSON object.');
+                    }
+
                     if (!importData.version || !importData.config) {
-                        throw new Error('Invalid configuration file format. Missing version or config data.');
+                        throw new Error('Invalid configuration file format. Missing required fields (version or config).');
+                    }
+
+                    // Validate version is a string
+                    if (typeof importData.version !== 'string') {
+                        throw new Error('Invalid configuration file format. Version must be a string.');
                     }
 
                     // Check version compatibility
@@ -894,7 +980,15 @@
                         alert('Warning: This configuration was created with a different version (v' + importData.version + '). Some settings may not work correctly.');
                     }
 
+                    // Validate config is an object
+                    if (typeof importData.config !== 'object' || importData.config === null) {
+                        throw new Error('Invalid configuration file format. Config must be a valid object.');
+                    }
+
                     const config = importData.config;
+
+                    // Validate configuration values
+                    validateConfigurationValues(config);
 
                     // Apply all configuration values to form elements
                     if (config.size !== undefined) {
@@ -950,11 +1044,8 @@
                           'Click "Generate Map" to generate the map with these settings.');
 
                 } catch (error) {
-                    if (error instanceof SyntaxError) {
-                        alert('Error parsing JSON file: The file is not valid JSON.\n\nPlease check that you selected the correct file.');
-                    } else {
-                        alert('Error importing configuration: ' + error.message);
-                    }
+                    // Errors are already well-formatted in the try block, just display them
+                    alert('Error importing configuration: ' + error.message);
                 }
             };
 
@@ -976,15 +1067,50 @@
             }
 
             try {
+                // Check if the string might be empty
+                if (base64String.length === 0) {
+                    throw new Error('The configuration string is empty.');
+                }
+
                 // Decode base64 string
-                const jsonString = atob(base64String);
+                let jsonString;
+                try {
+                    jsonString = atob(base64String);
+                } catch (decodeError) {
+                    if (decodeError.name === 'InvalidCharacterError') {
+                        throw new Error('The configuration string contains invalid characters.\n\nThis usually means:\n- The string was not copied completely\n- Extra spaces or line breaks were added\n- It\'s not a valid base64-encoded string');
+                    }
+                    throw decodeError;
+                }
+
+                // Check if decoded JSON is empty
+                if (!jsonString || jsonString.trim() === '') {
+                    throw new Error('The decoded configuration is empty. The configuration string may be corrupted.');
+                }
 
                 // Parse JSON
-                const importData = JSON.parse(jsonString);
+                let importData;
+                try {
+                    importData = JSON.parse(jsonString);
+                } catch (parseError) {
+                    if (parseError instanceof SyntaxError) {
+                        throw new Error('The configuration string is not valid JSON after decoding.\n\nDetails: ' + parseError.message + '\n\nPlease make sure you copied the complete configuration string.');
+                    }
+                    throw parseError;
+                }
 
                 // Validate structure
+                if (!importData || typeof importData !== 'object') {
+                    throw new Error('Invalid configuration format. The content must be a valid JSON object.');
+                }
+
                 if (!importData.version || !importData.config) {
-                    throw new Error('Invalid configuration format. Missing version or config data.');
+                    throw new Error('Invalid configuration format. Missing required fields (version or config).');
+                }
+
+                // Validate version is a string
+                if (typeof importData.version !== 'string') {
+                    throw new Error('Invalid configuration format. Version must be a string.');
                 }
 
                 // Check version compatibility
@@ -992,7 +1118,15 @@
                     alert('Warning: This configuration was created with a different version (v' + importData.version + '). Some settings may not work correctly.');
                 }
 
+                // Validate config is an object
+                if (typeof importData.config !== 'object' || importData.config === null) {
+                    throw new Error('Invalid configuration format. Config must be a valid object.');
+                }
+
                 const config = importData.config;
+
+                // Validate configuration values
+                validateConfigurationValues(config);
 
                 // Apply all configuration values to form elements
                 if (config.size !== undefined) {
@@ -1051,13 +1185,8 @@
                 textArea.value = '';
 
             } catch (error) {
-                if (error instanceof SyntaxError) {
-                    alert('Error parsing configuration: The text is not valid base64-encoded JSON.\n\nPlease make sure you copied the entire configuration string.');
-                } else if (error.name === 'InvalidCharacterError') {
-                    alert('Error decoding configuration: The text contains invalid characters.\n\nPlease make sure you pasted the complete configuration string without any extra spaces or line breaks.');
-                } else {
-                    alert('Error importing configuration: ' + error.message);
-                }
+                // Errors are already well-formatted in the try block, just display them
+                alert('Error importing configuration: ' + error.message);
             }
         }
 
