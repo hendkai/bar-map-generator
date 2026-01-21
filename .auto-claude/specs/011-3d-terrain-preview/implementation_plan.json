@@ -1,0 +1,449 @@
+{
+  "feature": "3D Terrain Preview",
+  "description": "Implement interactive 3D terrain viewer using WebGL with rotation, zoom, and pan controls",
+  "workflow_type": "simple",
+  "workflow_rationale": "Single-service (frontend) feature with no inter-service dependencies. All work is in bar_map_generator.html.",
+  "phases": [
+    {
+      "id": "phase-1-webgl-setup",
+      "name": "WebGL Setup and Initialization",
+      "type": "implementation",
+      "description": "Add 3D canvas element, initialize WebGL context, create basic shader programs",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Add 3D terrain canvas element to HTML",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Lines 226-241 (existing canvas wrapper pattern)"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Open bar_map_generator.html in browser, verify new canvas container appears below existing 2D previews"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Initialize WebGL context and shader programs",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Lines 618-643 (canvas context pattern)"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Check browser console for WebGL initialization success message, no errors"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-mesh-generation",
+      "name": "Terrain Mesh Generation",
+      "type": "implementation",
+      "description": "Generate 3D mesh geometry from heightmap data with proper vertex positioning and indices",
+      "depends_on": [
+        "phase-1-webgl-setup"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create terrain mesh geometry from heightmap array",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Lines 358-395 (heightmap data structure)"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "echo 'Mesh generation function created; check browser console for vertex count'",
+            "expected": "Mesh generation function created"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Create WebGL buffers and upload mesh data",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Lines 618-643 (canvas operations pattern)"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "After mesh generation, check browser console for buffer upload confirmation"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-terrain-rendering",
+      "name": "Terrain Rendering",
+      "type": "implementation",
+      "description": "Implement terrain rendering with height-based color coding for water, sand, grass, rock, snow",
+      "depends_on": [
+        "phase-2-mesh-generation"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Implement height-based vertex coloring in shaders",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Lines 482-522 (texture map coloring logic)"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Generate map and verify 3D terrain shows with colored height zones (water=blue, sand=yellow, grass=green, rock=gray, snow=white)"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Implement basic render loop with matrix transformations",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify terrain renders in 3D perspective when map is generated"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-camera-controls",
+      "name": "Camera Controls",
+      "type": "implementation",
+      "description": "Add mouse/touch controls for rotation, zoom, and pan around the terrain",
+      "depends_on": [
+        "phase-3-terrain-rendering"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Implement orbit camera with rotation controls (mouse drag)",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Lines 288-290 (event listener pattern)"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Click and drag on 3D canvas to rotate camera around terrain"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Implement zoom controls (mouse wheel)",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Scroll mouse wheel over 3D canvas to zoom in/out"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Implement pan controls (right-click drag or shift+drag)",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Right-click and drag to pan the camera view"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-5-marker-rendering",
+      "name": "Marker Rendering",
+      "type": "implementation",
+      "description": "Render start positions and resource spots as 3D markers on the terrain",
+      "depends_on": [
+        "phase-3-terrain-rendering"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Create start position markers (3D cones or cylinders)",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Lines 672-720 (2D marker rendering)"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Generate map and verify green markers appear at start positions in 3D view"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Create metal spot markers (yellow spheres)",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify yellow spherical markers appear at metal locations"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Create geothermal spot markers (red spheres)",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify red spherical markers appear at geothermal locations"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-6-integration",
+      "name": "Integration and Optimization",
+      "type": "integration",
+      "description": "Integrate 3D preview into main generateMap() function and optimize performance",
+      "depends_on": [
+        "phase-4-camera-controls",
+        "phase-5-marker-rendering"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Wire 3D preview into generateMap() function",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Lines 295-330 (generateMap function)"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Click 'Generate Map' button and verify 3D terrain updates automatically alongside 2D previews"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Optimize mesh for large maps (LOD or reduced resolution)",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with 2048x2048 map, verify frame rate remains acceptable (30+ FPS)"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Add UI controls for 3D viewer (reset view, toggle wireframe, etc.)",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Lines 222-223 (button pattern)"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify control buttons appear and function correctly below 3D canvas"
+          },
+          "status": "pending"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 6,
+    "total_subtasks": 14,
+    "services_involved": [
+      "frontend"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-4-camera-controls",
+            "phase-5-marker-rendering"
+          ],
+          "reason": "Both depend on phase-3 but don't conflict - camera controls work on terrain, markers work independently"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "1.2x faster than sequential (minimal parallelism due to dependencies)"
+    },
+    "startup_command": "Since this is a single HTML file with no build step, simply open bar_map_generator.html in a web browser to test changes."
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "manual_testing",
+    "test_types_required": [
+      "manual"
+    ],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "WebGL-based 3D viewer with mouse/touch controls for rotation and zoom",
+      "Terrain mesh generated from heightmap with proper scaling",
+      "Color-coding for terrain types (water, sand, grass, rock, snow)",
+      "Start positions and resources shown as 3D markers",
+      "Performance remains acceptable with medium and large maps"
+    ],
+    "verification_steps": [
+      {
+        "name": "3D Canvas Render",
+        "command": null,
+        "expected_outcome": "3D terrain visible in browser with proper WebGL rendering",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Camera Controls Test",
+        "command": null,
+        "expected_outcome": "Mouse drag rotates view, scroll zooms, right-click pans",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Terrain Coloring Test",
+        "command": null,
+        "expected_outcome": "Terrain shows correct colors based on height (water/sand/grass/rock/snow)",
+        "type": "manual",
+        "required": true,
+        "blocking": false
+      },
+      {
+        "name": "Markers Display Test",
+        "command": null,
+        "expected_outcome": "Start positions (green), metal spots (yellow), geo spots (red) visible in 3D",
+        "type": "manual",
+        "required": true,
+        "blocking": false
+      },
+      {
+        "name": "Performance Test",
+        "command": null,
+        "expected_outcome": "Frame rate remains acceptable (30+ FPS) with 2048x2048 map",
+        "type": "manual",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Medium-risk frontend feature requiring manual browser testing. No automated tests exist in this codebase. WebGL rendering requires visual verification. Performance testing needed for large maps."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null,
+      "note": "No automated test framework in project - all testing is manual"
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": [],
+      "note": "Single-file application with no separate services"
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": [],
+      "note": "Manual browser testing only"
+    },
+    "browser_verification": {
+      "required": true,
+      "pages": [
+        {
+          "url": "file://bar_map_generator.html",
+          "checks": [
+            "3D canvas renders without errors",
+            "Terrain displays with proper coloring",
+            "Camera controls respond to mouse input",
+            "Markers appear at correct positions",
+            "Frame rate acceptable on large maps"
+          ]
+        }
+      ]
+    },
+    "database_verification": {
+      "required": false,
+      "checks": [],
+      "note": "No database in this application"
+    }
+  },
+  "qa_signoff": null,
+  "status": "in_progress",
+  "planStatus": "in_progress",
+  "updated_at": "2026-01-21T19:30:00.000Z"
+}
