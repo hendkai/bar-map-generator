@@ -309,6 +309,7 @@
             shaderProgram.vertexHeightAttribute = gl.getAttribLocation(shaderProgram, 'aVertexHeight');
             shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, 'uPMatrix');
             shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, 'uMVMatrix');
+            shaderProgram.waterLevelUniform = gl.getUniformLocation(shaderProgram, 'uWaterLevel');
 
             gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
             gl.enableVertexAttribArray(shaderProgram.vertexHeightAttribute);
@@ -341,27 +342,30 @@
                 precision mediump float;
 
                 varying float vHeight;
+                uniform float uWaterLevel;
 
                 void main() {
                     vec3 color;
 
-                    if (vHeight < 40.0) {
-                        // Deep water
-                        color = vec3(0.0, 0.0, 0.5);
-                    } else if (vHeight < 60.0) {
-                        // Shallow water
-                        color = vec3(0.0, 0.3, 0.7);
-                    } else if (vHeight < 75.0) {
-                        // Sand
-                        color = vec3(0.76, 0.7, 0.5);
-                    } else if (vHeight < 150.0) {
-                        // Grass
-                        color = vec3(0.2, 0.6, 0.2);
-                    } else if (vHeight < 200.0) {
-                        // Rock
-                        color = vec3(0.5, 0.5, 0.5);
-                    } else {
-                        // Snow
+                    // Height-based terrain coloring (matches generateTextureMap pattern)
+                    // Water: RGB(30, 100, 200) -> vec3(0.118, 0.392, 0.784)
+                    if (vHeight < uWaterLevel) {
+                        color = vec3(0.118, 0.392, 0.784);
+                    }
+                    // Sand/Beach: RGB(255, 230, 150) -> vec3(1.0, 0.902, 0.588)
+                    else if (vHeight < uWaterLevel + 20.0) {
+                        color = vec3(1.0, 0.902, 0.588);
+                    }
+                    // Grass: RGB(50, 150, 50) -> vec3(0.196, 0.588, 0.196)
+                    else if (vHeight < uWaterLevel + 80.0) {
+                        color = vec3(0.196, 0.588, 0.196);
+                    }
+                    // Rock: RGB(120, 120, 120) -> vec3(0.471, 0.471, 0.471)
+                    else if (vHeight < uWaterLevel + 120.0) {
+                        color = vec3(0.471, 0.471, 0.471);
+                    }
+                    // Snow: RGB(255, 255, 255) -> vec3(1.0, 1.0, 1.0)
+                    else {
                         color = vec3(1.0, 1.0, 1.0);
                     }
 
