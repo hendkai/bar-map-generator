@@ -146,6 +146,111 @@
             font-weight: bold;
             color: #ffd700;
         }
+
+        /* Validation Results Styles */
+        .validation-results {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .validation-results h3 {
+            margin-top: 0;
+            color: #ffd700;
+            border-bottom: 2px solid #ffd700;
+            padding-bottom: 10px;
+        }
+
+        .validation-summary {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .validation-summary.all-pass {
+            background: rgba(76, 175, 80, 0.3);
+            border: 2px solid #4caf50;
+            color: #a5d6a7;
+        }
+
+        .validation-summary.has-failures {
+            background: rgba(244, 67, 54, 0.3);
+            border: 2px solid #f44336;
+            color: #ef9a9a;
+        }
+
+        .validation-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #ffd700;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .validation-item.pass {
+            border-left-color: #4caf50;
+            background: rgba(76, 175, 80, 0.1);
+        }
+
+        .validation-item.fail {
+            border-left-color: #f44336;
+            background: rgba(244, 67, 54, 0.1);
+        }
+
+        .validation-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+        .validation-icon.pass {
+            color: #4caf50;
+        }
+
+        .validation-icon.fail {
+            color: #f44336;
+        }
+
+        .validation-content {
+            flex: 1;
+        }
+
+        .validation-asset-name {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 5px;
+            color: #fff;
+        }
+
+        .validation-details {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .validation-error {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+
+        .validation-success {
+            color: #81c784;
+        }
+
+        .validation-dimensions {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
