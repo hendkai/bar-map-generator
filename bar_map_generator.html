@@ -685,6 +685,21 @@
             canvas.addEventListener('touchend', function() {
                 isDragging = false;
             });
+
+            // Mouse wheel zoom control
+            canvas.addEventListener('wheel', function(e) {
+                e.preventDefault();
+
+                // Zoom sensitivity: adjust zoom based on wheel delta
+                const zoomSpeed = 0.001;
+                cameraState.zoom -= e.deltaY * zoomSpeed;
+
+                // Clamp zoom to reasonable limits (0.5x to 5.0x)
+                cameraState.zoom = Math.max(0.5, Math.min(5.0, cameraState.zoom));
+
+                // Request redraw
+                requestAnimationFrame(drawScene);
+            }, { passive: false });
         }
 
         // Render the 3D terrain scene
