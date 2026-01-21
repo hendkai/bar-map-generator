@@ -280,7 +280,16 @@
             <button onclick="downloadMinimap()">Minimap (.png)</button>
             <button onclick="downloadConfig()">mapinfo.lua</button>
         </div>
-        
+
+        <div class="download-section">
+            <h3>⚙️ Configuration Import/Export</h3>
+            <p style="margin: 15px 0; font-size: 14px; opacity: 0.8;">
+                Save and share your map configurations as JSON files or copy-pasteable text strings.
+            </p>
+            <button onclick="exportConfigJSON()">📄 Export Config (JSON)</button>
+            <button onclick="exportConfigText()">📋 Copy Config (Text)</button>
+        </div>
+
         <div class="info">
             <h3>💡 Usage Instructions</h3>
             <p><strong>⚠️ Development Status:</strong> This tool is experimental and may not work reliably yet.</p>
