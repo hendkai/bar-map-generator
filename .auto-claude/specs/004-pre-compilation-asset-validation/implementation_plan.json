@@ -62,7 +62,7 @@
             "type": "manual",
             "instructions": "Generate map, call validateAllBARAssets() in console. Verify it returns validation report for all 9 assets with dimension and format checks."
           },
-          "status": "pending"
+          "status": "completed"
         }
       ]
     },
@@ -347,5 +347,5 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-01-21T19:35:14.617Z"
+  "updated_at": "2026-01-21T19:39:12.688Z"
 }

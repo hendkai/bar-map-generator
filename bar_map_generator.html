@@ -2180,6 +2180,164 @@ https://github.com/beyond-all-reason/bar-map-generator
             };
         }
 
+        /**
+         * Master validation function that validates all BAR assets
+         * @param {Object} barAssets - Object containing all BAR assets (from generateBARAssets)
+         * @param {number} mapUnits - Map units (size / 64)
+         * @returns {Promise<Object>} Comprehensive validation report with allPass flag and detailed results
+         */
+        async function validateAllBARAssets(barAssets, mapUnits) {
+            if (!barAssets) {
+                return {
+                    allPass: false,
+                    results: [],
+                    summary: 'No assets provided for validation'
+                };
+            }
+
+            // Define validation specifications for each asset
+            const assetSpecs = [
+                {
+                    name: 'heightmap',
+                    formula: '64 * mapUnits + 1',
+                    format: 'image/png'
+                },
+                {
+                    name: 'metalmap',
+                    formula: '32 * mapUnits',
+                    format: 'image/bmp'
+                },
+                {
+                    name: 'texture',
+                    formula: '512 * mapUnits',
+                    format: 'image/bmp'
+                },
+                {
+                    name: 'normalmap',
+                    formula: '512 * mapUnits',
+                    format: 'image/png'
+                },
+                {
+                    name: 'specularmap',
+                    formula: '256 * mapUnits',
+                    format: 'image/png'
+                },
+                {
+                    name: 'minimap',
+                    formula: '1024', // Fixed size, independent of mapUnits
+                    format: 'image/png'
+                },
+                {
+                    name: 'grassmap',
+                    formula: '16 * mapUnits',
+                    format: 'image/bmp'
+                },
+                {
+                    name: 'typemap',
+                    formula: '32 * mapUnits',
+                    format: 'image/bmp'
+                },
+                {
+                    name: 'splatmap',
+                    formula: 'Math.max(2048, mapUnits * 64 / 2)', // max(2048, size/2)
+                    format: 'image/png'
+                }
+            ];
+
+            const results = [];
+            let allPass = true;
+
+            // Validate each asset
+            for (const spec of assetSpecs) {
+                const asset = barAssets[spec.name];
+
+                if (!asset) {
+                    results.push({
+                        asset: spec.name,
+                        pass: false,
+                        dimensions: null,
+                        format: null,
+                        errors: [`${spec.name}: Asset not found in barAssets object`]
+                    });
+                    allPass = false;
+                    continue;
+                }
+
+                // Validate dimensions
+                const dimensionResult = validateAssetDimensions(
+                    spec.name,
+                    asset,
+                    mapUnits,
+                    spec.formula
+                );
+
+                // Validate format
+                let formatResult;
+                try {
+                    formatResult = await validateAssetFormat(
+                        spec.name,
+                        asset,
+                        spec.format
+                    );
+                } catch (error) {
+                    formatResult = {
+                        pass: false,
+                        format: spec.format,
+                        message: `${spec.name}: Format validation error - ${error.message}`
+                    };
+                }
+
+                // Collect errors
+                const errors = [];
+                if (!dimensionResult.pass) {
+                    errors.push(dimensionResult.message);
+                }
+                if (!formatResult.pass) {
+                    errors.push(formatResult.message);
+                }
+
+                // Build result object
+                const assetResult = {
+                    asset: spec.name,
+                    pass: dimensionResult.pass && formatResult.pass,
+                    dimensions: {
+                        pass: dimensionResult.pass,
+                        actual: dimensionResult.actual,
+                        expected: dimensionResult.expected,
+                        message: dimensionResult.message
+                    },
+                    format: {
+                        pass: formatResult.pass,
+                        expected: spec.format,
+                        actual: formatResult.format,
+                        message: formatResult.message
+                    },
+                    errors: errors.length > 0 ? errors : null
+                };
+
+                results.push(assetResult);
+
+                // Update allPass flag
+                if (!assetResult.pass) {
+                    allPass = false;
+                }
+            }
+
+            // Build summary
+            const passCount = results.filter(r => r.pass).length;
+            const failCount = results.length - passCount;
+            const summary = allPass
+                ? `✓ All ${results.length} assets validated successfully`
+                : `Validation complete: ${passCount} passed, ${failCount} failed`;
+
+            return {
+                allPass,
+                results,
+                summary,
+                timestamp: new Date().toISOString()
+            };
+        }
+
         function generateBARHeightmap() {
             const size = mapConfig.size;
             const mapUnits = size / 64;

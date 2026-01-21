@@ -31,18 +31,27 @@
   - Helpful error messages for browser support issues
 - **Verification**: Can be tested via browser console by calling `testValidateAssetFormat()`
 
-## In Progress
-
-### Phase 1: Validation Logic Layer
-
-#### subtask-1-3: Create validateAllBARAssets() master function
-- **Status**: Pending
-- **Description**: Master function that runs all validations and returns comprehensive report
-- **Implementation Location**: After validateAssetFormat function (around line 2182)
-- **Requirements**:
-  - Iterate all assets from generateBARAssets()
-  - Call validation functions for each asset
-  - Return {allPass: boolean, results: [{asset, pass, dimensions, format, errors}]}
+#### subtask-1-3: Create validateAllBARAssets() master function ✓ COMPLETED
+- **Status**: Completed (2026-01-21)
+- **Implementation**: Added `validateAllBARAssets()` function at line 2183 in bar_map_generator.html
+- **Functionality**:
+  - Master validation function that orchestrates all asset validations
+  - Validates all 9 BAR assets (heightmap, metalmap, texture, normalmap, specularmap, minimap, grassmap, typemap, splatmap)
+  - Calls validateAssetDimensions() and validateAssetFormat() for each asset
+  - Returns comprehensive report: {allPass: boolean, results: [{asset, pass, dimensions, format, errors}], summary, timestamp}
+  - Each result includes detailed dimension and format validation results
+  - Handles missing assets gracefully with appropriate error messages
+- **Asset Specifications Validated**:
+  - heightmap: formula '64 * mapUnits + 1', format 'image/png'
+  - metalmap: formula '32 * mapUnits', format 'image/bmp'
+  - texture: formula '512 * mapUnits', format 'image/bmp'
+  - normalmap: formula '512 * mapUnits', format 'image/png'
+  - specularmap: formula '256 * mapUnits', format 'image/png'
+  - minimap: formula '1024' (fixed), format 'image/png'
+  - grassmap: formula '16 * mapUnits', format 'image/bmp'
+  - typemap: formula '32 * mapUnits', format 'image/bmp'
+  - splatmap: formula 'Math.max(2048, mapUnits * 64 / 2)', format 'image/png'
+- **Verification**: Generate map, call `validateAllBARAssets(barAssets, mapUnits)` in browser console. Verify validation report for all 9 assets with dimension and format checks.
 
 ## Pending
 
