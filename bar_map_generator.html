@@ -699,6 +699,35 @@
             };
         }
 
+        function generateVoronoiTerritories(startPositions, size) {
+            const territories = new Int8Array(size * size);
+
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const index = y * size + x;
+                    let nearestPlayer = 0;
+                    let minDistance = Infinity;
+
+                    for (let i = 0; i < startPositions.length; i++) {
+                        const pos = startPositions[i];
+                        const dist = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
+
+                        if (dist < minDistance) {
+                            minDistance = dist;
+                            nearestPlayer = i;
+                        }
+                    }
+
+                    territories[index] = nearestPlayer;
+                }
+            }
+
+            return {
+                territories: territories,
+                startPositions: startPositions
+            };
+        }
+
         function generateTextureMap(size, heightmapData, waterLevel) {
             const textureData = new Array(size * size * 4); // RGBA
             
