@@ -63,7 +63,7 @@
             margin: 5px 0;
         }
         
-        input[type="number"], input[type="text"], select {
+        input[type="number"], input[type="text"], select, input[type="file"] {
             width: 100%;
             padding: 8px;
             border: none;
@@ -286,8 +286,27 @@
             <p style="margin: 15px 0; font-size: 14px; opacity: 0.8;">
                 Save and share your map configurations as JSON files or copy-pasteable text strings.
             </p>
-            <button onclick="exportConfigJSON()">📄 Export Config (JSON)</button>
-            <button onclick="exportConfigText()">📋 Copy Config (Text)</button>
+
+            <!-- Export Section -->
+            <div style="margin-bottom: 20px;">
+                <strong>Export Configuration:</strong><br>
+                <button onclick="exportConfigJSON()">📄 Export Config (JSON)</button>
+                <button onclick="exportConfigText()">📋 Copy Config (Text)</button>
+            </div>
+
+            <!-- Import from File Section -->
+            <div style="margin-bottom: 20px;">
+                <strong>Import from File:</strong><br>
+                <input type="file" id="configFileInput" accept=".json" style="margin-bottom: 10px;">
+                <button onclick="importConfigFromFile()">📁 Import from File</button>
+            </div>
+
+            <!-- Import from Text Section -->
+            <div>
+                <strong>Import from Text:</strong><br>
+                <textarea id="configTextInput" placeholder="Paste your configuration string here..." style="margin-bottom: 10px;"></textarea>
+                <button onclick="importConfigFromText()">📝 Import from Text</button>
+            </div>
         </div>
 
         <div class="info">
@@ -841,6 +860,15 @@
             } catch (error) {
                 alert('Error exporting configuration: ' + error.message);
             }
+        }
+
+        function importConfigFromFile() {
+            const fileInput = document.getElementById('configFileInput');
+            const file = fileInput.files[0];
+            importConfigFromJSON(file);
+
+            // Clear the file input after import
+            fileInput.value = '';
         }
 
         function importConfigFromJSON(file) {
