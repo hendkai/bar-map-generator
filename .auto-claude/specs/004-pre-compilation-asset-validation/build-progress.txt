@@ -86,10 +86,38 @@
   - Border-left color coding for quick visual scanning
 - **Verification**: CSS classes exist in inspector (17 validation-related classes), green/red colors properly defined, layout uses responsive flexbox
 
+#### subtask-2-2: Add HTML container for validation results display ✓ COMPLETED
+- **Status**: Completed (2026-01-21)
+- **Implementation**: Added HTML container for validation results at lines 365-370 in bar_map_generator.html
+- **Functionality**:
+  - Added `<div id="validationResults" class="validation-results">` container in download section
+  - Container initially hidden with inline `style="display: none;"`
+  - Positioned after individual download buttons within download-section div
+  - Contains three child elements:
+    - Header: `<h3>🔍 Asset Validation Results</h3>`
+    - Summary div: `<div id="validationSummary" class="validation-summary"></div>` for pass/fail summary
+    - Items div: `<div id="validationItems" class="validation-items"></div>` for individual asset results
+- **Structure**:
+  ```html
+  <div id="validationResults" class="validation-results" style="display: none;">
+      <h3>🔍 Asset Validation Results</h3>
+      <div id="validationSummary" class="validation-summary"></div>
+      <div id="validationItems"></div>
+  </div>
+  ```
+- **Design Integration**:
+  - Uses `validation-results` CSS class added in subtask-2-1
+  - Positioned to display below download buttons
+  - Hidden by default, will be shown via JavaScript when validation runs
+  - Follows existing HTML patterns from download section
+- **Verification**:
+  - ✅ Validation container exists in DOM (id="validationResults")
+  - ✅ Container is initially hidden (display: none inline style)
+  - ✅ Container is positioned correctly (within download-section, after download buttons)
+
 ## Pending
 
 ### Phase 2: Validation Results UI
-- subtask-2-2: Add HTML container for validation results display in download section
 - subtask-2-3: Create displayValidationResults() function
 
 ### Phase 3: Download Flow Integration
@@ -99,9 +127,8 @@
 
 ## Next Steps
 
-1. Implement subtask-2-2: Add HTML container for validation results display
-2. Implement subtask-2-3: Create displayValidationResults() function
-3. Move to Phase 3: Download flow integration
+1. Implement subtask-2-3: Create displayValidationResults() function
+2. Move to Phase 3: Download flow integration
 
 ## Notes
 
