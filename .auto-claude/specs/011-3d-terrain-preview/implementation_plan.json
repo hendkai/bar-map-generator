@@ -120,7 +120,7 @@
             "type": "manual",
             "instructions": "Generate map and verify 3D terrain shows with colored height zones (water=blue, sand=yellow, grass=green, rock=gray, snow=white)"
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-3-2",
@@ -445,5 +445,5 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-01-21T19:31:10.643Z"
+  "updated_at": "2026-01-21T19:37:15.595Z"
 }
