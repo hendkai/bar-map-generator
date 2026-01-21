@@ -403,6 +403,58 @@
             return shader;
         }
 
+        // Generate terrain mesh geometry from heightmap
+        function generateTerrainMesh(heightmap, size) {
+            const vertices = [];
+            const heights = [];
+            const indices = [];
+
+            // Scale factors for the terrain
+            const scaleXZ = 1.0 / size;
+            const scaleY = 1.0 / 255.0;
+
+            // Generate vertices
+            for (let z = 0; z < size; z++) {
+                for (let x = 0; x < size; x++) {
+                    const index = z * size + x;
+                    const height = heightmap[index];
+
+                    // Position: x, y (height), z
+                    // Center the terrain around (0, 0, 0)
+                    const posX = (x / (size - 1)) * 2.0 - 1.0;
+                    const posY = height * scaleY;
+                    const posZ = (z / (size - 1)) * 2.0 - 1.0;
+
+                    vertices.push(posX, posY, posZ);
+                    heights.push(height);
+                }
+            }
+
+            // Generate indices for triangles
+            for (let z = 0; z < size - 1; z++) {
+                for (let x = 0; x < size - 1; x++) {
+                    const topLeft = z * size + x;
+                    const topRight = topLeft + 1;
+                    const bottomLeft = (z + 1) * size + x;
+                    const bottomRight = bottomLeft + 1;
+
+                    // First triangle (top-left, bottom-left, top-right)
+                    indices.push(topLeft, bottomLeft, topRight);
+
+                    // Second triangle (top-right, bottom-left, bottom-right)
+                    indices.push(topRight, bottomLeft, bottomRight);
+                }
+            }
+
+            return {
+                vertices: new Float32Array(vertices),
+                heights: new Float32Array(heights),
+                indices: new Uint16Array(indices),
+                vertexCount: size * size,
+                indexCount: indices.length
+            };
+        }
+
         // Update value displays
         function updateValueDisplays() {
             document.getElementById('noiseValue').textContent = document.getElementById('noiseStrength').value;

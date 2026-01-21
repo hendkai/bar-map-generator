@@ -44,7 +44,7 @@
             "type": "manual",
             "instructions": "Check browser console for WebGL initialization success message, no errors"
           },
-          "status": "pending"
+          "status": "completed"
         }
       ]
     },
