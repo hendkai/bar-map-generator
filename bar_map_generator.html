@@ -2038,11 +2038,153 @@ https://github.com/beyond-all-reason/bar-map-generator
             };
         }
 
+        /**
+         * Validates that a canvas can be converted to the target format (PNG/BMP)
+         * @param {string} assetName - Name of the asset being validated (e.g., 'heightmap', 'metalmap')
+         * @param {HTMLCanvasElement} canvas - The canvas element to validate
+         * @param {string} expectedFormat - Expected format ('image/png' or 'image/bmp')
+         * @returns {Promise<Object>} Validation result with pass status, format, and message
+         */
+        async function validateAssetFormat(assetName, canvas, expectedFormat) {
+            if (!canvas || !canvas.width || !canvas.height) {
+                return {
+                    pass: false,
+                    format: 'invalid',
+                    message: `${assetName}: Invalid canvas element`
+                };
+            }
+
+            // Normalize format names
+            const formatMap = {
+                'image/png': 'PNG',
+                'image/bmp': 'BMP',
+                'png': 'image/png',
+                'bmp': 'image/bmp'
+            };
+
+            // Convert to MIME type if needed
+            let mimeType = expectedFormat.toLowerCase().startsWith('image/')
+                ? expectedFormat.toLowerCase()
+                : formatMap[expectedFormat.toLowerCase()] || expectedFormat;
+
+            if (!mimeType.startsWith('image/')) {
+                return {
+                    pass: false,
+                    format: expectedFormat,
+                    message: `${assetName}: Invalid format specification '${expectedFormat}'`
+                };
+            }
+
+            try {
+                // Attempt canvas to blob conversion
+                const blob = await new Promise((resolve, reject) => {
+                    try {
+                        canvas.toBlob(
+                            blob => {
+                                if (blob) {
+                                    resolve(blob);
+                                } else {
+                                    reject(new Error('toBlob returned null'));
+                                }
+                            },
+                            mimeType
+                        );
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+
+                // Verify the blob was created successfully
+                if (!blob || blob.size === 0) {
+                    return {
+                        pass: false,
+                        format: formatMap[mimeType] || mimeType,
+                        message: `${assetName}: Failed to create ${formatMap[mimeType] || mimeType} - blob is empty or null`
+                    };
+                }
+
+                // Verify the MIME type
+                if (!blob.type.includes(mimeType.split('/')[1])) {
+                    return {
+                        pass: false,
+                        format: formatMap[mimeType] || mimeType,
+                        actualFormat: blob.type,
+                        message: `${assetName}: Format mismatch - Expected ${mimeType}, browser returned ${blob.type}`
+                    };
+                }
+
+                return {
+                    pass: true,
+                    format: formatMap[mimeType] || mimeType,
+                    message: `${assetName}: ✓ Format validation passed (${formatMap[mimeType] || mimeType})`
+                };
+
+            } catch (error) {
+                // Check if this is a browser support issue
+                const errorMessage = error.message.toLowerCase();
+                let helpfulMessage = `${assetName}: ✗ Format validation failed`;
+
+                if (errorMessage.includes('type') || errorMessage.includes('support')) {
+                    helpfulMessage += ` - Browser may not support ${mimeType} format. ${error.message}`;
+                } else if (errorMessage.includes('security')) {
+                    helpfulMessage += ` - Security error: ${error.message}`;
+                } else {
+                    helpfulMessage += ` - ${error.message}`;
+                }
+
+                return {
+                    pass: false,
+                    format: formatMap[mimeType] || mimeType,
+                    message: helpfulMessage
+                };
+            }
+        }
+
+        /**
+         * Test helper function to verify validateAssetFormat works correctly
+         * Call this from browser console to test the validation function
+         */
+        async function testValidateAssetFormat() {
+            // Test case 1: Valid PNG canvas
+            const canvas1 = document.createElement('canvas');
+            canvas1.width = 512;
+            canvas1.height = 512;
+            const ctx1 = canvas1.getContext('2d');
+            ctx1.fillStyle = 'red';
+            ctx1.fillRect(0, 0, 512, 512);
+
+            const result1 = await validateAssetFormat('heightmap', canvas1, 'image/png');
+            console.log('Test 1 - Valid PNG:', result1);
+            // Expected: {pass: true, format: 'PNG', message: "heightmap: ✓ Format validation passed (PNG)"}
+
+            // Test case 2: Invalid canvas
+            const result2 = await validateAssetFormat('test', null, 'image/png');
+            console.log('Test 2 - Invalid canvas:', result2);
+            // Expected: {pass: false, format: 'invalid', message: "test: Invalid canvas element"}
+
+            // Test case 3: Test with 'png' shorthand
+            const result3 = await validateAssetFormat('metalmap', canvas1, 'png');
+            console.log('Test 3 - PNG shorthand:', result3);
+            // Expected: {pass: true, format: 'PNG', message: "metalmap: ✓ Format validation passed (PNG)"}
+
+            // Test case 4: Test with BMP (note: browsers may convert to PNG)
+            const result4 = await validateAssetFormat('texture', canvas1, 'image/bmp');
+            console.log('Test 4 - BMP format:', result4);
+            // Note: This may show that browser doesn't support BMP, which is expected behavior
+
+            return {
+                test1: result1.pass === true,
+                test2: result2.pass === false,
+                test3: result3.pass === true,
+                allPassed: null // Will be set after tests complete
+            };
+        }
+
         function generateBARHeightmap() {
             const size = mapConfig.size;
             const mapUnits = size / 64;
             const heightmapSize = 64 * mapUnits + 1;
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = heightmapSize;
             canvas.height = heightmapSize;
