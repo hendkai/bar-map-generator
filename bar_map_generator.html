@@ -63,13 +63,25 @@
             margin: 5px 0;
         }
         
-        input[type="number"], select {
+        input[type="number"], input[type="text"], select {
             width: 100%;
             padding: 8px;
             border: none;
             border-radius: 5px;
             background: rgba(255, 255, 255, 0.9);
             color: #333;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            resize: vertical;
+            min-height: 80px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         
         button {
@@ -214,6 +226,17 @@
                 
                 <label>Geo Spots: <span class="value-display" id="geoValue">4</span>
                     <input type="range" id="geoSpots" min="2" max="12" step="1" value="4">
+                </label>
+            </div>
+
+            <div class="control-group">
+                <h3>Map Metadata</h3>
+                <label>Creator Name:
+                    <input type="text" id="creatorName" placeholder="Enter your name" maxlength="100">
+                </label>
+
+                <label>Description:
+                    <textarea id="mapDescription" placeholder="Enter a description for this map" maxlength="500"></textarea>
                 </label>
             </div>
         </div>
