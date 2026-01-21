@@ -1,0 +1,351 @@
+{
+  "feature": "Pre-Compilation Asset Validation",
+  "description": "Add validation layer that checks all generated assets for PyMapConv compatibility before attempting compilation. Verify dimensions, formats, bit depths, and file naming conventions. Display validation results with clear pass/fail indicators.",
+  "workflow_type": "feature",
+  "workflow_rationale": "Feature workflow chosen because we're adding new validation functionality that has clear dependency order: validation logic must exist before UI can display results, and both must exist before download flow integration. This is a single-service (frontend) feature with no cross-service dependencies.",
+  "phases": [
+    {
+      "id": "phase-1-validation-logic",
+      "name": "Validation Logic Layer",
+      "type": "implementation",
+      "description": "Create validation functions that verify asset dimensions, formats, and bit depths against PyMapConv specifications. This layer provides the core validation API that UI and download flow will consume.",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create validateAssetDimensions() function that checks canvas dimensions against expected formulas",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "implementation_notes": "Add function after line 1916 (after generateBARAssets). Function should take asset name, canvas, mapUnits, and expected dimension formula. Returns {pass: boolean, actual: number, expected: number, message: string}.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Open browser console, call validateAssetDimensions('heightmap', testCanvas, 16, '64 * mapUnits + 1'). Verify it returns correct validation result for 1025x1025 canvas."
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Create validateAssetFormat() function that verifies canvas can be converted to target format (PNG/BMP)",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "canvasToBlob function at line 2469"
+          ],
+          "implementation_notes": "Add function after validateAssetDimensions. Should attempt canvasToBlob conversion and catch format errors. Returns {pass: boolean, format: string, message: string}.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with canvas elements, verify PNG and BMP format validation works correctly. Check error handling for invalid formats."
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Create validateAllBARAssets() master function that runs all validations and returns comprehensive report",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "generateBARAssets function structure at line 1888"
+          ],
+          "implementation_notes": "Add after validateAssetFormat. Should iterate all assets from generateBARAssets(), call validation functions for each, return {allPass: boolean, results: [{asset, pass, dimensions, format, errors}]}.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Generate map, call validateAllBARAssets() in console. Verify it returns validation report for all 9 assets with dimension and format checks."
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-ui-display",
+      "name": "Validation Results UI",
+      "type": "implementation",
+      "description": "Add UI elements to display validation results with clear pass/fail indicators. Users should see validation status before attempting download.",
+      "depends_on": [
+        "phase-1-validation-logic"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Add CSS styles for validation results display (success/error colors, icons, layout)",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "CSS section lines 7-148"
+          ],
+          "implementation_notes": "Add styles for .validation-results, .validation-item, .validation-pass, .validation-fail, .validation-icon. Use green/red colors for pass/fail. Add to <style> section.",
+          "verification": {
+            "type": "browser",
+            "url": "file:///path/to/bar_map_generator.html",
+            "checks": [
+              "CSS classes exist in inspector",
+              "Green/red colors display correctly",
+              "Layout is responsive"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Add HTML container for validation results display in download section",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "download-section HTML at line 243-250"
+          ],
+          "implementation_notes": "Add <div id=\"validationResults\" class=\"validation-results\"></div> after the download button (around line 246). Initially hidden, shown when validation runs.",
+          "verification": {
+            "type": "browser",
+            "url": "file:///path/to/bar_map_generator.html",
+            "checks": [
+              "Validation container exists in DOM",
+              "Container is initially hidden",
+              "Container is positioned correctly"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Create displayValidationResults() function that renders validation report to UI with pass/fail indicators",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Error display pattern using alert/console at line 758"
+          ],
+          "implementation_notes": "Add function after validateAllBARAssets. Should take validation report, generate HTML with checkmark/X icons, color-coded results, and insert into validationResults div. Show summary at top.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Generate map, run validateAllBARAssets(), call displayValidationResults(report). Verify UI shows all assets with correct pass/fail icons and colors."
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-workflow-integration",
+      "name": "Download Flow Integration",
+      "type": "implementation",
+      "description": "Integrate validation into the downloadCompleteMapPackage flow. Validation should run automatically and prevent download if assets fail validation.",
+      "depends_on": [
+        "phase-1-validation-logic",
+        "phase-2-ui-display"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Modify downloadCompleteMapPackage() to run validation before packaging",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "downloadCompleteMapPackage at line 728-760"
+          ],
+          "implementation_notes": "After line 739 (generateBARAssets), add: const validation = validateAllBARAssets(barAssets, mapConfig.size / 64); displayValidationResults(validation); if (!validation.allPass) { alert('Validation failed. Please fix errors before downloading.'); return; }",
+          "verification": {
+            "type": "manual",
+            "instructions": "Generate map, click download button. Verify validation runs first, displays results, and blocks download on failure. Allow download on success."
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Add 'Validate Assets' button to run validation independently without downloading",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Button pattern at line 245"
+          ],
+          "implementation_notes": "Add button next to download button: <button onclick=\"runAssetValidation()\">✓ Validate Assets</button>. Add runAssetValidation() function that generates assets, validates, and displays results.",
+          "verification": {
+            "type": "browser",
+            "url": "file:///path/to/bar_map_generator.html",
+            "checks": [
+              "Validate button exists",
+              "Clicking button runs validation",
+              "Results display correctly"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Add helpful error messages that explain dimension rules and how to fix issues",
+          "service": "frontend",
+          "files_to_modify": [
+            "bar_map_generator.html"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "implementation_notes": "Enhance validateAssetDimensions to generate helpful error messages. Include expected formula (e.g., 'Expected: 64 * 16 + 1 = 1025, Got: 1024'). Add link to documentation in validation results.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with intentionally wrong asset dimensions. Verify error messages are clear and helpful. Check that users understand what needs fixing."
+          },
+          "status": "pending"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 3,
+    "total_subtasks": 9,
+    "services_involved": [
+      "frontend"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 1,
+      "parallel_groups": [],
+      "recommended_workers": 1,
+      "speedup_estimate": "Sequential - phases have strict dependencies"
+    },
+    "startup_command": "No command needed - open bar_map_generator.html in browser"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": [
+      "manual"
+    ],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All 9 assets are validated against PyMapConv specifications",
+      "Dimension validation checks correct formulas for all map sizes (512, 1024, 2048)",
+      "Format validation ensures PNG/BMP compatibility",
+      "Validation results display with clear pass/fail indicators",
+      "Validation failures prevent download and explain what needs fixing"
+    ],
+    "verification_steps": [
+      {
+        "name": "Generate map and run validation",
+        "command": "open bar_map_generator.html",
+        "expected_outcome": "Map generates, validation runs, all assets pass",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Test dimension validation",
+        "command": "Test with 1024x1024 map (16x16 units). Verify heightmap is 1025x1025, metalmap is 512x512, etc.",
+        "expected_outcome": "All dimension checks pass",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Test format validation",
+        "command": "Verify PNG assets (heightmap, normalmap, specularmap, minimap, splatmap) and BMP assets (metalmap, texture, grassmap, typemap) validate correctly",
+        "expected_outcome": "All format checks pass",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Test error blocking",
+        "command": "Temporarily break dimension formula, verify validation fails and blocks download",
+        "expected_outcome": "Download blocked, helpful error message shown",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Test UI display",
+        "command": "Verify validation results show with pass/fail icons, colors, and helpful messages",
+        "expected_outcome": "Clear visual feedback, easy to understand",
+        "type": "manual",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Medium risk change adds new validation functionality but doesn't modify existing asset generation code. Manual browser testing is sufficient since this is a client-side-only feature with no backend or database. Testing focuses on verifying validation logic correctly checks dimensions/formats and that UI clearly communicates results."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null,
+      "notes": "Unit tests not practical for single-file HTML/JS application. Manual testing via browser console is sufficient."
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": [],
+      "notes": "No backend services or external APIs to test. All functionality is client-side."
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": [],
+      "notes": "Manual E2E testing via browser covers the full flow: generate map → validate → download (or block on failure)"
+    },
+    "browser_verification": {
+      "required": true,
+      "pages": [
+        {
+          "url": "bar_map_generator.html",
+          "checks": [
+            "Validation button exists and is clickable",
+            "Download button triggers validation first",
+            "Validation results display with pass/fail indicators",
+            "Failed validation prevents download with clear message",
+            "All 9 assets validated (heightmap, metalmap, texture, normalmap, specularmap, minimap, grassmap, typemap, splatmap)"
+          ]
+        }
+      ]
+    },
+    "dimension_verification": {
+      "required": true,
+      "checks": [
+        "Heightmap: 64 * mapUnits + 1 formula verified",
+        "Metalmap: 32 * mapUnits formula verified",
+        "Texture: 512 * mapUnits formula verified",
+        "Normalmap: 512 * mapUnits formula verified",
+        "Specularmap: 256 * mapUnits formula verified",
+        "Minimap: 1024x1024 fixed size verified",
+        "Grassmap: 16 * mapUnits formula verified",
+        "Typemap: 32 * mapUnits formula verified",
+        "Splatmap: max(2048, size / 2) formula verified"
+      ]
+    },
+    "format_verification": {
+      "required": true,
+      "checks": [
+        "PNG format validation for heightmap, normalmap, specularmap, minimap, splatmap",
+        "BMP format validation for metalmap, texture, grassmap, typemap",
+        "Format conversion errors are caught and reported"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "status": "in_progress",
+  "planStatus": "in_progress",
+  "updated_at": "2026-01-21T19:35:14.617Z"
+}
