@@ -63,13 +63,25 @@
             margin: 5px 0;
         }
         
-        input[type="number"], select {
+        input[type="number"], input[type="text"], select, input[type="file"] {
             width: 100%;
             padding: 8px;
             border: none;
             border-radius: 5px;
             background: rgba(255, 255, 255, 0.9);
             color: #333;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            resize: vertical;
+            min-height: 80px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         
         button {
@@ -216,6 +228,17 @@
                     <input type="range" id="geoSpots" min="2" max="12" step="1" value="4">
                 </label>
             </div>
+
+            <div class="control-group">
+                <h3>Map Metadata</h3>
+                <label>Creator Name:
+                    <input type="text" id="creatorName" placeholder="Enter your name" maxlength="100">
+                </label>
+
+                <label>Description:
+                    <textarea id="mapDescription" placeholder="Enter a description for this map" maxlength="500"></textarea>
+                </label>
+            </div>
         </div>
         
         <div class="button-container">
@@ -270,7 +293,35 @@
             <button onclick="downloadMinimap()">Minimap (.png)</button>
             <button onclick="downloadConfig()">mapinfo.lua</button>
         </div>
-        
+
+        <div class="download-section">
+            <h3>⚙️ Configuration Import/Export</h3>
+            <p style="margin: 15px 0; font-size: 14px; opacity: 0.8;">
+                Save and share your map configurations as JSON files or copy-pasteable text strings.
+            </p>
+
+            <!-- Export Section -->
+            <div style="margin-bottom: 20px;">
+                <strong>Export Configuration:</strong><br>
+                <button onclick="exportConfigJSON()">📄 Export Config (JSON)</button>
+                <button onclick="exportConfigText()">📋 Copy Config (Text)</button>
+            </div>
+
+            <!-- Import from File Section -->
+            <div style="margin-bottom: 20px;">
+                <strong>Import from File:</strong><br>
+                <input type="file" id="configFileInput" accept=".json" style="margin-bottom: 10px;">
+                <button onclick="importConfigFromFile()">📁 Import from File</button>
+            </div>
+
+            <!-- Import from Text Section -->
+            <div>
+                <strong>Import from Text:</strong><br>
+                <textarea id="configTextInput" placeholder="Paste your configuration string here..." style="margin-bottom: 10px;"></textarea>
+                <button onclick="importConfigFromText()">📝 Import from Text</button>
+            </div>
+        </div>
+
         <div class="info">
             <h3>💡 Usage Instructions</h3>
             <p><strong>⚠️ Development Status:</strong> This tool is experimental and may not work reliably yet.</p>
@@ -1690,7 +1741,422 @@
             
             console.log("Resource map drawn to canvas - NO DOWNLOAD");
         }
-        
+
+        // CONFIGURATION EXPORT/IMPORT FUNCTIONS
+        function exportConfigJSON() {
+            if (!mapConfig || Object.keys(mapConfig).length === 0) {
+                alert('Please generate a map first!');
+                return;
+            }
+
+            // Collect metadata from form fields
+            const creatorName = document.getElementById('creatorName').value.trim() || 'Anonymous';
+            const mapDescription = document.getElementById('mapDescription').value.trim() || 'No description';
+
+            // Create export object with all configuration and metadata
+            const exportData = {
+                version: '1.0',
+                timestamp: new Date().toISOString(),
+                metadata: {
+                    creator: creatorName,
+                    description: mapDescription
+                },
+                config: { ...mapConfig }
+            };
+
+            // Convert to JSON string with pretty formatting
+            const jsonString = JSON.stringify(exportData, null, 2);
+
+            // Create blob and download
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `map_config_${mapConfig.terrainType}_${mapConfig.size}x${mapConfig.size}_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportConfigText() {
+            if (!mapConfig || Object.keys(mapConfig).length === 0) {
+                alert('Please generate a map first!');
+                return;
+            }
+
+            try {
+                // Collect metadata from form fields
+                const creatorName = document.getElementById('creatorName').value.trim() || 'Anonymous';
+                const mapDescription = document.getElementById('mapDescription').value.trim() || 'No description';
+
+                // Create export object with all configuration and metadata
+                const exportData = {
+                    version: '1.0',
+                    timestamp: new Date().toISOString(),
+                    metadata: {
+                        creator: creatorName,
+                        description: mapDescription
+                    },
+                    config: { ...mapConfig }
+                };
+
+                // Convert to JSON string (compact for sharing)
+                const jsonString = JSON.stringify(exportData);
+
+                // Encode as base64 for easy copy-paste sharing
+                const base64String = btoa(jsonString);
+
+                // Copy to clipboard
+                navigator.clipboard.writeText(base64String).then(() => {
+                    alert('Configuration copied to clipboard!\n\nYou can now paste this config string to share with others.');
+                }).catch(err => {
+                    // Fallback for older browsers or when clipboard API fails
+                    const textArea = document.createElement('textarea');
+                    textArea.value = base64String;
+                    textArea.style.position = 'fixed';
+                    textArea.style.left = '-999999px';
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        alert('Configuration copied to clipboard!\n\nYou can now paste this config string to share with others.');
+                    } catch (err) {
+                        alert('Failed to copy to clipboard. Please check browser permissions.');
+                    }
+                    document.body.removeChild(textArea);
+                });
+            } catch (error) {
+                alert('Error exporting configuration: ' + error.message);
+            }
+        }
+
+        // Validation function for configuration values
+        function validateConfigurationValues(config) {
+            // Valid map sizes
+            const validMapSizes = ['512', '1024', '2048'];
+            const validTerrainTypes = ['continental', 'islands', 'canyon', 'hills', 'flat'];
+            const validPlayerCounts = ['2', '4', '6', '8'];
+
+            // Validate mapSize
+            if (config.size !== undefined) {
+                if (typeof config.size !== 'string' && typeof config.size !== 'number') {
+                    throw new Error('Invalid configuration: map size must be a string or number.');
+                }
+                const sizeStr = String(config.size);
+                if (!validMapSizes.includes(sizeStr)) {
+                    throw new Error('Invalid configuration: map size must be 512, 1024, or 2048. Got: ' + sizeStr);
+                }
+            }
+
+            // Validate terrainType
+            if (config.terrainType !== undefined) {
+                if (typeof config.terrainType !== 'string') {
+                    throw new Error('Invalid configuration: terrain type must be a string.');
+                }
+                if (!validTerrainTypes.includes(config.terrainType)) {
+                    throw new Error('Invalid configuration: terrain type must be one of: ' + validTerrainTypes.join(', ') + '. Got: ' + config.terrainType);
+                }
+            }
+
+            // Validate playerCount
+            if (config.playerCount !== undefined) {
+                if (typeof config.playerCount !== 'string' && typeof config.playerCount !== 'number') {
+                    throw new Error('Invalid configuration: player count must be a string or number.');
+                }
+                const playerStr = String(config.playerCount);
+                if (!validPlayerCounts.includes(playerStr)) {
+                    throw new Error('Invalid configuration: player count must be 2, 4, 6, or 8. Got: ' + playerStr);
+                }
+            }
+
+            // Validate numeric ranges
+            const numericFields = [
+                { name: 'noiseStrength', min: 0, max: 1 },
+                { name: 'heightVariation', min: 0, max: 1 },
+                { name: 'waterLevel', min: 0, max: 1 },
+                { name: 'metalSpots', min: 0, max: 100 },
+                { name: 'metalStrength', min: 0, max: 1 },
+                { name: 'geoSpots', min: 0, max: 50 }
+            ];
+
+            for (const field of numericFields) {
+                if (config[field.name] !== undefined) {
+                    const value = Number(config[field.name]);
+                    if (isNaN(value)) {
+                        throw new Error('Invalid configuration: ' + field.name + ' must be a valid number. Got: ' + config[field.name]);
+                    }
+                    if (value < field.min || value > field.max) {
+                        throw new Error('Invalid configuration: ' + field.name + ' must be between ' + field.min + ' and ' + field.max + '. Got: ' + value);
+                    }
+                }
+            }
+        }
+
+        function importConfigFromFile() {
+            const fileInput = document.getElementById('configFileInput');
+            const file = fileInput.files[0];
+            importConfigFromJSON(file);
+
+            // Clear the file input after import
+            fileInput.value = '';
+        }
+
+        function importConfigFromJSON(file) {
+            if (!file) {
+                alert('Please select a JSON file to import!');
+                return;
+            }
+
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                try {
+                    const jsonContent = e.target.result;
+
+                    // Check if file is empty
+                    if (!jsonContent || jsonContent.trim() === '') {
+                        throw new Error('The file is empty. Please select a valid configuration file.');
+                    }
+
+                    // Try to parse JSON
+                    let importData;
+                    try {
+                        importData = JSON.parse(jsonContent);
+                    } catch (parseError) {
+                        if (parseError instanceof SyntaxError) {
+                            throw new Error('The file is not valid JSON.\n\nDetails: ' + parseError.message);
+                        }
+                        throw parseError;
+                    }
+
+                    // Validate structure
+                    if (!importData || typeof importData !== 'object') {
+                        throw new Error('Invalid configuration file format. The content must be a valid JSON object.');
+                    }
+
+                    if (!importData.version || !importData.config) {
+                        throw new Error('Invalid configuration file format. Missing required fields (version or config).');
+                    }
+
+                    // Validate version is a string
+                    if (typeof importData.version !== 'string') {
+                        throw new Error('Invalid configuration file format. Version must be a string.');
+                    }
+
+                    // Check version compatibility
+                    if (importData.version !== '1.0') {
+                        alert('Warning: This configuration was created with a different version (v' + importData.version + '). Some settings may not work correctly.');
+                    }
+
+                    // Validate config is an object
+                    if (typeof importData.config !== 'object' || importData.config === null) {
+                        throw new Error('Invalid configuration file format. Config must be a valid object.');
+                    }
+
+                    const config = importData.config;
+
+                    // Validate configuration values
+                    validateConfigurationValues(config);
+
+                    // Apply all configuration values to form elements
+                    if (config.size !== undefined) {
+                        document.getElementById('mapSize').value = config.size;
+                    }
+                    if (config.terrainType !== undefined) {
+                        document.getElementById('terrainType').value = config.terrainType;
+                    }
+                    if (config.playerCount !== undefined) {
+                        document.getElementById('playerCount').value = config.playerCount;
+                    }
+                    if (config.noiseStrength !== undefined) {
+                        document.getElementById('noiseStrength').value = config.noiseStrength;
+                    }
+                    if (config.heightVariation !== undefined) {
+                        document.getElementById('heightVariation').value = config.heightVariation;
+                    }
+                    if (config.waterLevel !== undefined) {
+                        document.getElementById('waterLevel').value = config.waterLevel;
+                    }
+                    if (config.metalSpots !== undefined) {
+                        document.getElementById('metalSpots').value = config.metalSpots;
+                    }
+                    if (config.metalStrength !== undefined) {
+                        document.getElementById('metalStrength').value = config.metalStrength;
+                    }
+                    if (config.geoSpots !== undefined) {
+                        document.getElementById('geoSpots').value = config.geoSpots;
+                    }
+
+                    // Apply metadata
+                    if (importData.metadata) {
+                        if (importData.metadata.creator) {
+                            document.getElementById('creatorName').value = importData.metadata.creator;
+                        }
+                        if (importData.metadata.description) {
+                            document.getElementById('mapDescription').value = importData.metadata.description;
+                        }
+                    }
+
+                    // Update value displays
+                    updateValueDisplays();
+
+                    // Update mapConfig object
+                    mapConfig = { ...config };
+
+                    // Show success message with details
+                    const timestamp = importData.timestamp ? new Date(importData.timestamp).toLocaleString() : 'Unknown';
+                    alert('Configuration imported successfully!\n\n' +
+                          'Creator: ' + (importData.metadata?.creator || 'Anonymous') + '\n' +
+                          'Description: ' + (importData.metadata?.description || 'No description') + '\n' +
+                          'Exported: ' + timestamp + '\n\n' +
+                          'Click "Generate Map" to generate the map with these settings.');
+
+                } catch (error) {
+                    // Errors are already well-formatted in the try block, just display them
+                    alert('Error importing configuration: ' + error.message);
+                }
+            };
+
+            reader.onerror = function() {
+                alert('Error reading file: Please try again with a different file.');
+            };
+
+            // Read the file as text
+            reader.readAsText(file);
+        }
+
+        function importConfigFromText() {
+            const textArea = document.getElementById('configTextInput');
+            const base64String = textArea.value.trim();
+
+            if (!base64String) {
+                alert('Please paste a configuration string into the text area first!');
+                return;
+            }
+
+            try {
+                // Check if the string might be empty
+                if (base64String.length === 0) {
+                    throw new Error('The configuration string is empty.');
+                }
+
+                // Decode base64 string
+                let jsonString;
+                try {
+                    jsonString = atob(base64String);
+                } catch (decodeError) {
+                    if (decodeError.name === 'InvalidCharacterError') {
+                        throw new Error('The configuration string contains invalid characters.\n\nThis usually means:\n- The string was not copied completely\n- Extra spaces or line breaks were added\n- It\'s not a valid base64-encoded string');
+                    }
+                    throw decodeError;
+                }
+
+                // Check if decoded JSON is empty
+                if (!jsonString || jsonString.trim() === '') {
+                    throw new Error('The decoded configuration is empty. The configuration string may be corrupted.');
+                }
+
+                // Parse JSON
+                let importData;
+                try {
+                    importData = JSON.parse(jsonString);
+                } catch (parseError) {
+                    if (parseError instanceof SyntaxError) {
+                        throw new Error('The configuration string is not valid JSON after decoding.\n\nDetails: ' + parseError.message + '\n\nPlease make sure you copied the complete configuration string.');
+                    }
+                    throw parseError;
+                }
+
+                // Validate structure
+                if (!importData || typeof importData !== 'object') {
+                    throw new Error('Invalid configuration format. The content must be a valid JSON object.');
+                }
+
+                if (!importData.version || !importData.config) {
+                    throw new Error('Invalid configuration format. Missing required fields (version or config).');
+                }
+
+                // Validate version is a string
+                if (typeof importData.version !== 'string') {
+                    throw new Error('Invalid configuration format. Version must be a string.');
+                }
+
+                // Check version compatibility
+                if (importData.version !== '1.0') {
+                    alert('Warning: This configuration was created with a different version (v' + importData.version + '). Some settings may not work correctly.');
+                }
+
+                // Validate config is an object
+                if (typeof importData.config !== 'object' || importData.config === null) {
+                    throw new Error('Invalid configuration format. Config must be a valid object.');
+                }
+
+                const config = importData.config;
+
+                // Validate configuration values
+                validateConfigurationValues(config);
+
+                // Apply all configuration values to form elements
+                if (config.size !== undefined) {
+                    document.getElementById('mapSize').value = config.size;
+                }
+                if (config.terrainType !== undefined) {
+                    document.getElementById('terrainType').value = config.terrainType;
+                }
+                if (config.playerCount !== undefined) {
+                    document.getElementById('playerCount').value = config.playerCount;
+                }
+                if (config.noiseStrength !== undefined) {
+                    document.getElementById('noiseStrength').value = config.noiseStrength;
+                }
+                if (config.heightVariation !== undefined) {
+                    document.getElementById('heightVariation').value = config.heightVariation;
+                }
+                if (config.waterLevel !== undefined) {
+                    document.getElementById('waterLevel').value = config.waterLevel;
+                }
+                if (config.metalSpots !== undefined) {
+                    document.getElementById('metalSpots').value = config.metalSpots;
+                }
+                if (config.metalStrength !== undefined) {
+                    document.getElementById('metalStrength').value = config.metalStrength;
+                }
+                if (config.geoSpots !== undefined) {
+                    document.getElementById('geoSpots').value = config.geoSpots;
+                }
+
+                // Apply metadata
+                if (importData.metadata) {
+                    if (importData.metadata.creator) {
+                        document.getElementById('creatorName').value = importData.metadata.creator;
+                    }
+                    if (importData.metadata.description) {
+                        document.getElementById('mapDescription').value = importData.metadata.description;
+                    }
+                }
+
+                // Update value displays
+                updateValueDisplays();
+
+                // Update mapConfig object
+                mapConfig = { ...config };
+
+                // Show success message with details
+                const timestamp = importData.timestamp ? new Date(importData.timestamp).toLocaleString() : 'Unknown';
+                alert('Configuration imported successfully!\n\n' +
+                      'Creator: ' + (importData.metadata?.creator || 'Anonymous') + '\n' +
+                      'Description: ' + (importData.metadata?.description || 'No description') + '\n' +
+                      'Exported: ' + timestamp + '\n\n' +
+                      'Click "Generate Map" to generate the map with these settings.');
+
+                // Clear the textarea after successful import
+                textArea.value = '';
+
+            } catch (error) {
+                // Errors are already well-formatted in the try block, just display them
+                alert('Error importing configuration: ' + error.message);
+            }
+        }
+
         // COMPLETE BAR MAP PACKAGE GENERATION
         async function downloadCompleteMapPackage() {
             if (!heightmapData) {

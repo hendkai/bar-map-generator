@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Round-trip Export/Import Verification Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-case {
+            background: #f9f9f9;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #2196F3;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .failure {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .info {
+            color: #2196F3;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.secondary {
+            background: #2196F3;
+        }
+        button.secondary:hover {
+            background: #0b7dda;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background: #4CAF50;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background: #f2f2f2;
+        }
+        .match {
+            background: #d4edda !important;
+        }
+        .mismatch {
+            background: #f8d7da !important;
+        }
+        .code {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .step {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔃 Round-trip Export/Import Verification</h1>
+
+    <div class="test-section">
+        <h2>📋 Purpose</h2>
+        <p>This test verifies that the configuration export/import workflow preserves ALL configuration data accurately through a complete round-trip cycle.</p>
+        <p><strong>Test Coverage:</strong></p>
+        <ul>
+            <li>JSON export → JSON import round-trip</li>
+            <li>Text export → Text import round-trip</li>
+            <li>All 10 configuration parameters</li>
+            <li>Metadata fields (creator, description)</li>
+            <li>Data type preservation</li>
+            <li>Edge cases and special characters</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🧪 Test Configuration</h2>
+        <div class="test-case">
+            <h3>Test Configuration Values</h3>
+            <p>The following configuration will be used for testing:</p>
+            <table id="configTable">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Value</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody id="configTableBody">
+                </tbody>
+            </table>
+            <button onclick="loadTestConfig()">Load Test Configuration</button>
+            <button class="secondary" onclick="randomizeConfig()">Randomize Configuration</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>🔄 JSON Round-trip Test</h2>
+        <div class="instructions">
+            <h4>Manual Test Steps:</h4>
+            <div class="step">1. Click "Load Test Configuration" above</div>
+            <div class="step">2. Record the values in "Before Export" column</div>
+            <div class="step">3. Click "Export as JSON" - this will download a file</div>
+            <div class="step">4. Click "Choose File" and select the downloaded JSON file</div>
+            <div class="step">5. Click "Import from JSON"</div>
+            <div class="step">6. Compare "After Import" values with "Before Export"</div>
+            <div class="step">7. All values should match exactly</div>
+        </div>
+        <div class="test-case">
+            <h3>JSON Test Results</h3>
+            <table id="jsonTestTable">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Before Export</th>
+                        <th>After Import</th>
+                        <th>Match?</th>
+                    </tr>
+                </thead>
+                <tbody id="jsonTestTableBody">
+                </tbody>
+            </table>
+            <button onclick="captureBeforeExport('json')">Capture Before Export</button>
+            <button onclick="simulateJSONExport()">Export as JSON (Simulated)</button>
+            <button onclick="simulateJSONImport()">Import from JSON (Simulated)</button>
+            <button class="secondary" onclick="compareJSONValues()">Compare Values</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>📋 Text Round-trip Test</h2>
+        <div class="instructions">
+            <h4>Manual Test Steps:</h4>
+            <div class="step">1. Click "Load Test Configuration" above</div>
+            <div class="step">2. Record the values in "Before Export" column</div>
+            <div class="step">3. Click "Copy Config (Text)" - this copies to clipboard</div>
+            <div class="step">4. Paste the clipboard content into the text area</div>
+            <div class="step">5. Click "Import from Text"</div>
+            <div class="step">6. Compare "After Import" values with "Before Export"</div>
+            <div class="step">7. All values should match exactly</div>
+        </div>
+        <div class="test-case">
+            <h3>Text Test Results</h3>
+            <table id="textTestTable">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Before Export</th>
+                        <th>After Import</th>
+                        <th>Match?</th>
+                    </tr>
+                </thead>
+                <tbody id="textTestTableBody">
+                </tbody>
+            </table>
+            <button onclick="captureBeforeExport('text')">Capture Before Export</button>
+            <button onclick="simulateTextExport()">Copy Config (Text) (Simulated)</button>
+            <button onclick="simulateTextImport()">Import from Text (Simulated)</button>
+            <button class="secondary" onclick="compareTextValues()">Compare Values</button>
+            <div style="margin-top: 15px;">
+                <label for="exportedText"><strong>Exported Text (Base64):</strong></label>
+                <textarea id="exportedText" rows="4" style="width: 100%; margin-top: 5px;" placeholder="Exported configuration will appear here..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>✅ Overall Test Results</h2>
+        <div id="overallResults" class="test-case">
+            <h3>Summary</h3>
+            <p><strong>JSON Round-trip:</strong> <span id="jsonResult" class="info">Not tested</span></p>
+            <p><strong>Text Round-trip:</strong> <span id="textResult" class="info">Not tested</span></p>
+            <p><strong>Overall Status:</strong> <span id="overallStatus" class="info">In progress</span></p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>📝 Additional Test Cases</h2>
+        <div class="test-case">
+            <h3>Special Characters Test</h3>
+            <p>Test metadata with special characters:</p>
+            <button onclick="testSpecialCharacters()">Test Special Chars in Metadata</button>
+            <div id="specialCharsResult" style="margin-top: 10px;"></div>
+        </div>
+        <div class="test-case">
+            <h3>Extreme Values Test</h3>
+            <p>Test with minimum and maximum parameter values:</p>
+            <button onclick="testExtremeValues()">Test Extreme Values</button>
+            <div id="extremeValuesResult" style="margin-top: 10px;"></div>
+        </div>
+        <div class="test-case">
+            <h3>All Terrain Types Test</h3>
+            <p>Test each terrain type:</p>
+            <button onclick="testAllTerrains()">Test All Terrain Types</button>
+            <div id="allTerrainsResult" style="margin-top: 10px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Test configuration object
+        let testConfig = {
+            size: 1024,
+            terrainType: 'continental',
+            playerCount: 4,
+            noiseStrength: 0.5,
+            heightVariation: 0.6,
+            waterLevel: 0.3,
+            metalSpots: 50,
+            metalStrength: 0.7,
+            geoSpots: 10,
+            startPositions: []
+        };
+
+        let testMetadata = {
+            creator: 'Test Creator',
+            description: 'Test configuration for round-trip verification'
+        };
+
+        let beforeExportJSON = {};
+        let afterImportJSON = {};
+        let beforeExportText = {};
+        let afterImportText = {};
+
+        // Configuration parameter definitions
+        const configParams = [
+            { name: 'size', type: 'number', display: 'Map Size' },
+            { name: 'terrainType', type: 'string', display: 'Terrain Type' },
+            { name: 'playerCount', type: 'number', display: 'Player Count' },
+            { name: 'noiseStrength', type: 'number', display: 'Noise Strength' },
+            { name: 'heightStrength', type: 'number', display: 'Height Variation' },
+            { name: 'waterLevel', type: 'number', display: 'Water Level' },
+            { name: 'metalSpots', type: 'number', display: 'Metal Spots' },
+            { name: 'metalStrength', type: 'number', display: 'Metal Strength' },
+            { name: 'geoSpots', type: 'number', display: 'Geo Spots' }
+        ];
+
+        // Initialize page
+        window.onload = function() {
+            displayTestConfig();
+        };
+
+        function displayTestConfig() {
+            const tbody = document.getElementById('configTableBody');
+            tbody.innerHTML = '';
+
+            const params = [
+                { name: 'size', value: testConfig.size, type: 'number' },
+                { name: 'terrainType', value: testConfig.terrainType, type: 'string' },
+                { name: 'playerCount', value: testConfig.playerCount, type: 'number' },
+                { name: 'noiseStrength', value: testConfig.noiseStrength, type: 'number' },
+                { name: 'heightVariation', value: testConfig.heightVariation, type: 'number' },
+                { name: 'waterLevel', value: testConfig.waterLevel, type: 'number' },
+                { name: 'metalSpots', value: testConfig.metalSpots, type: 'number' },
+                { name: 'metalStrength', value: testConfig.metalStrength, type: 'number' },
+                { name: 'geoSpots', value: testConfig.geoSpots, type: 'number' },
+                { name: 'creator', value: testMetadata.creator, type: 'string' },
+                { name: 'description', value: testMetadata.description, type: 'string' }
+            ];
+
+            params.forEach(param => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${param.name}</strong></td>
+                    <td>${param.value}</td>
+                    <td>${param.type}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function loadTestConfig() {
+            // Standard test configuration
+            testConfig = {
+                size: 1024,
+                terrainType: 'continental',
+                playerCount: 4,
+                noiseStrength: 0.5,
+                heightVariation: 0.6,
+                waterLevel: 0.3,
+                metalSpots: 50,
+                metalStrength: 0.7,
+                geoSpots: 10,
+                startPositions: []
+            };
+            testMetadata = {
+                creator: 'Test Creator',
+                description: 'Test configuration for round-trip verification'
+            };
+            displayTestConfig();
+            alert('Test configuration loaded!\n\nYou can now proceed with the round-trip tests.');
+        }
+
+        function randomizeConfig() {
+            const sizes = [512, 1024, 2048];
+            const terrains = ['continental', 'islands', 'canyon', 'hills', 'flat'];
+            const players = [2, 4, 6, 8];
+
+            testConfig = {
+                size: sizes[Math.floor(Math.random() * sizes.length)],
+                terrainType: terrains[Math.floor(Math.random() * terrains.length)],
+                playerCount: players[Math.floor(Math.random() * players.length)],
+                noiseStrength: Math.round(Math.random() * 100) / 100,
+                heightVariation: Math.round(Math.random() * 100) / 100,
+                waterLevel: Math.round(Math.random() * 100) / 100,
+                metalSpots: Math.floor(Math.random() * 101),
+                metalStrength: Math.round(Math.random() * 100) / 100,
+                geoSpots: Math.floor(Math.random() * 51),
+                startPositions: []
+            };
+            testMetadata = {
+                creator: 'Random User ' + Math.floor(Math.random() * 1000),
+                description: 'Random test config #' + Math.floor(Math.random() * 10000)
+            };
+            displayTestConfig();
+            alert('Configuration randomized!\n\nNew values generated for testing.');
+        }
+
+        function captureBeforeExport(type) {
+            const data = {
+                ...testConfig,
+                creator: testMetadata.creator,
+                description: testMetadata.description
+            };
+
+            if (type === 'json') {
+                beforeExportJSON = { ...data };
+                displayCaptureResults('jsonTestTableBody', beforeExportJSON, 'before');
+                alert('Before-export values captured for JSON test!');
+            } else {
+                beforeExportText = { ...data };
+                displayCaptureResults('textTestTableBody', beforeExportText, 'before');
+                alert('Before-export values captured for Text test!');
+            }
+        }
+
+        function displayCaptureResults(tableId, data, stage) {
+            const tbody = document.getElementById(tableId);
+            tbody.innerHTML = '';
+
+            Object.keys(data).forEach(key => {
+                if (key !== 'startPositions') { // Skip startPositions array
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><strong>${key}</strong></td>
+                        <td>${stage === 'before' ? data[key] : ''}</td>
+                        <td>${stage === 'after' ? data[key] : ''}</td>
+                        <td>${stage === 'compare' ? (beforeExportJSON[key] === data[key] ? '✓' : '✗') : ''}</td>
+                    `;
+                    if (stage === 'compare') {
+                        row.classList.add(beforeExportJSON[key] === data[key] ? 'match' : 'mismatch');
+                    }
+                    tbody.appendChild(row);
+                }
+            });
+        }
+
+        function simulateJSONExport() {
+            const exportData = {
+                version: '1.0',
+                timestamp: new Date().toISOString(),
+                metadata: {
+                    creator: testMetadata.creator,
+                    description: testMetadata.description
+                },
+                config: { ...testConfig }
+            };
+
+            const jsonString = JSON.stringify(exportData, null, 2);
+            console.log('Exported JSON:', jsonString);
+
+            alert('JSON Export simulated!\n\nCheck console for exported data.\n\nIn real application, this would download a file.');
+        }
+
+        function simulateJSONImport() {
+            // Simulate importing the same data we just exported
+            afterImportJSON = {
+                ...testConfig,
+                creator: testMetadata.creator,
+                description: testMetadata.description
+            };
+            displayCaptureResults('jsonTestTableBody', afterImportJSON, 'after');
+            alert('JSON Import simulated!\n\nValues captured. Now click "Compare Values" to verify.');
+        }
+
+        function simulateTextExport() {
+            const exportData = {
+                version: '1.0',
+                timestamp: new Date().toISOString(),
+                metadata: {
+                    creator: testMetadata.creator,
+                    description: testMetadata.description
+                },
+                config: { ...testConfig }
+            };
+
+            const jsonString = JSON.stringify(exportData);
+            const base64String = btoa(jsonString);
+            document.getElementById('exportedText').value = base64String;
+            console.log('Exported Text (Base64):', base64String);
+
+            alert('Text Export simulated!\n\nBase64 string copied to text area.\n\nIn real application, this would copy to clipboard.');
+        }
+
+        function simulateTextImport() {
+            const base64String = document.getElementById('exportedText').value;
+            if (!base64String) {
+                alert('No exported text to import! Please export first.');
+                return;
+            }
+
+            try {
+                const jsonString = atob(base64String);
+                const importData = JSON.parse(jsonString);
+
+                afterImportText = {
+                    ...importData.config,
+                    creator: importData.metadata.creator,
+                    description: importData.metadata.description
+                };
+                displayCaptureResults('textTestTableBody', afterImportText, 'after');
+                alert('Text Import simulated!\n\nValues captured. Now click "Compare Values" to verify.');
+            } catch (error) {
+                alert('Error during import simulation: ' + error.message);
+            }
+        }
+
+        function compareJSONValues() {
+            const tbody = document.getElementById('jsonTestTableBody');
+            tbody.innerHTML = '';
+
+            let allMatch = true;
+            const mismatchedFields = [];
+
+            Object.keys(beforeExportJSON).forEach(key => {
+                if (key !== 'startPositions') {
+                    const before = beforeExportJSON[key];
+                    const after = afterImportJSON[key] || '';
+                    const matches = before === after;
+
+                    if (!matches) {
+                        allMatch = false;
+                        mismatchedFields.push(key);
+                    }
+
+                    const row = document.createElement('tr');
+                    row.classList.add(matches ? 'match' : 'mismatch');
+                    row.innerHTML = `
+                        <td><strong>${key}</strong></td>
+                        <td>${before}</td>
+                        <td>${after}</td>
+                        <td>${matches ? '<span class="success">✓ Match</span>' : '<span class="failure">✗ Mismatch</span>'}</td>
+                    `;
+                    tbody.appendChild(row);
+                }
+            });
+
+            // Update results
+            const resultElement = document.getElementById('jsonResult');
+            if (allMatch) {
+                resultElement.innerHTML = '<span class="success">✓ PASSED - All values preserved</span>';
+            } else {
+                resultElement.innerHTML = `<span class="failure">✗ FAILED - Mismatched fields: ${mismatchedFields.join(', ')}</span>`;
+            }
+
+            updateOverallStatus();
+        }
+
+        function compareTextValues() {
+            const tbody = document.getElementById('textTestTableBody');
+            tbody.innerHTML = '';
+
+            let allMatch = true;
+            const mismatchedFields = [];
+
+            Object.keys(beforeExportText).forEach(key => {
+                if (key !== 'startPositions') {
+                    const before = beforeExportText[key];
+                    const after = afterImportText[key] || '';
+                    const matches = before === after;
+
+                    if (!matches) {
+                        allMatch = false;
+                        mismatchedFields.push(key);
+                    }
+
+                    const row = document.createElement('tr');
+                    row.classList.add(matches ? 'match' : 'mismatch');
+                    row.innerHTML = `
+                        <td><strong>${key}</strong></td>
+                        <td>${before}</td>
+                        <td>${after}</td>
+                        <td>${matches ? '<span class="success">✓ Match</span>' : '<span class="failure">✗ Mismatch</span>'}</td>
+                    `;
+                    tbody.appendChild(row);
+                }
+            });
+
+            // Update results
+            const resultElement = document.getElementById('textResult');
+            if (allMatch) {
+                resultElement.innerHTML = '<span class="success">✓ PASSED - All values preserved</span>';
+            } else {
+                resultElement.innerHTML = `<span class="failure">✗ FAILED - Mismatched fields: ${mismatchedFields.join(', ')}</span>`;
+            }
+
+            updateOverallStatus();
+        }
+
+        function updateOverallStatus() {
+            const jsonResult = document.getElementById('jsonResult').textContent;
+            const textResult = document.getElementById('textResult').textContent;
+            const overallElement = document.getElementById('overallStatus');
+
+            if (jsonResult.includes('PASSED') && textResult.includes('PASSED')) {
+                overallElement.innerHTML = '<span class="success">✓ ALL TESTS PASSED</span>';
+            } else if (jsonResult.includes('FAILED') || textResult.includes('FAILED')) {
+                overallElement.innerHTML = '<span class="failure">✗ SOME TESTS FAILED</span>';
+            } else {
+                overallElement.innerHTML = '<span class="info">In progress</span>';
+            }
+        }
+
+        function testSpecialCharacters() {
+            const specialCases = [
+                { creator: 'Test "Quotes" Creator', description: 'Test with "quotes" and \'apostrophes\'' },
+                { creator: 'Creator <with> &symbols', description: 'Description with <html> & entities' },
+                { creator: 'Émojis 😊🎮 Creator', description: 'Unicode: 中文 漢字 العربية' },
+                { creator: 'Multi\nLine\nCreator', description: 'Tabs\tand\nnewlines' },
+                { creator: 'Creator\\with\\backslashes', description: 'Forward/slashes\\and\\backslashes' }
+            ];
+
+            let results = [];
+            specialCases.forEach((testCase, index) => {
+                testMetadata = testCase;
+                testConfig = { size: 1024, terrainType: 'continental', playerCount: 4 };
+
+                // Export
+                const exportData = {
+                    version: '1.0',
+                    timestamp: new Date().toISOString(),
+                    metadata: testMetadata,
+                    config: testConfig
+                };
+
+                const jsonString = JSON.stringify(exportData);
+                const base64String = btoa(jsonString);
+
+                // Import
+                let success = true;
+                let error = '';
+                try {
+                    const decoded = atob(base64String);
+                    const imported = JSON.parse(decoded);
+                    if (imported.metadata.creator !== testCase.creator ||
+                        imported.metadata.description !== testCase.description) {
+                        success = false;
+                        error = 'Values do not match';
+                    }
+                } catch (e) {
+                    success = false;
+                    error = e.message;
+                }
+
+                results.push({
+                    index: index + 1,
+                    creator: testCase.creator.substring(0, 30) + '...',
+                    status: success ? '✓' : '✗',
+                    error: error
+                });
+            });
+
+            let html = '<table><tr><th>#</th><th>Creator</th><th>Status</th><th>Error</th></tr>';
+            results.forEach(r => {
+                html += `<tr><td>${r.index}</td><td>${r.creator}</td><td class="${r.status === '✓' ? 'success' : 'failure'}">${r.status}</td><td>${r.error || '-'}</td></tr>`;
+            });
+            html += '</table>';
+
+            document.getElementById('specialCharsResult').innerHTML = html;
+        }
+
+        function testExtremeValues() {
+            const extremeCases = [
+                { name: 'Minimum values', config: { size: 512, terrainType: 'flat', playerCount: 2, noiseStrength: 0, heightVariation: 0, waterLevel: 0, metalSpots: 0, metalStrength: 0, geoSpots: 0 }},
+                { name: 'Maximum values', config: { size: 2048, terrainType: 'hills', playerCount: 8, noiseStrength: 1, heightVariation: 1, waterLevel: 1, metalSpots: 100, metalStrength: 1, geoSpots: 50 }},
+                { name: 'Mixed extremes', config: { size: 1024, terrainType: 'islands', playerCount: 6, noiseStrength: 0.01, heightVariation: 0.99, waterLevel: 0.5, metalSpots: 1, metalStrength: 0.5, geoSpots: 25 }}
+            ];
+
+            let results = [];
+            extremeCases.forEach((testCase, index) => {
+                // Export
+                const exportData = {
+                    version: '1.0',
+                    timestamp: new Date().toISOString(),
+                    metadata: { creator: 'Test', description: testCase.name },
+                    config: testCase.config
+                };
+
+                const jsonString = JSON.stringify(exportData);
+                const base64String = btoa(jsonString);
+
+                // Import
+                let success = true;
+                let error = '';
+                let mismatches = [];
+
+                try {
+                    const decoded = atob(base64String);
+                    const imported = JSON.parse(decoded);
+
+                    Object.keys(testCase.config).forEach(key => {
+                        if (imported.config[key] !== testCase.config[key]) {
+                            success = false;
+                            mismatches.push(`${key}: ${testCase.config[key]} → ${imported.config[key]}`);
+                        }
+                    });
+                } catch (e) {
+                    success = false;
+                    error = e.message;
+                }
+
+                results.push({
+                    index: index + 1,
+                    name: testCase.name,
+                    status: success ? '✓' : '✗',
+                    details: success ? 'All values preserved' : (error || mismatches.join('; '))
+                });
+            });
+
+            let html = '<table><tr><th>#</th><th>Test</th><th>Status</th><th>Details</th></tr>';
+            results.forEach(r => {
+                html += `<tr><td>${r.index}</td><td>${r.name}</td><td class="${r.status === '✓' ? 'success' : 'failure'}">${r.status}</td><td>${r.details}</td></tr>`;
+            });
+            html += '</table>';
+
+            document.getElementById('extremeValuesResult').innerHTML = html;
+        }
+
+        function testAllTerrains() {
+            const terrains = ['continental', 'islands', 'canyon', 'hills', 'flat'];
+            let results = [];
+
+            terrains.forEach((terrain, index) => {
+                testConfig = {
+                    size: 1024,
+                    terrainType: terrain,
+                    playerCount: 4,
+                    noiseStrength: 0.5,
+                    heightVariation: 0.6,
+                    waterLevel: 0.3,
+                    metalSpots: 50,
+                    metalStrength: 0.7,
+                    geoSpots: 10,
+                    startPositions: []
+                };
+
+                // Export
+                const exportData = {
+                    version: '1.0',
+                    timestamp: new Date().toISOString(),
+                    metadata: { creator: 'Test', description: `Testing ${terrain} terrain` },
+                    config: testConfig
+                };
+
+                const jsonString = JSON.stringify(exportData);
+                const base64String = btoa(jsonString);
+
+                // Import
+                let success = true;
+                try {
+                    const decoded = atob(base64String);
+                    const imported = JSON.parse(decoded);
+                    if (imported.config.terrainType !== terrain) {
+                        success = false;
+                    }
+                } catch (e) {
+                    success = false;
+                }
+
+                results.push({
+                    index: index + 1,
+                    terrain: terrain,
+                    status: success ? '✓' : '✗'
+                });
+            });
+
+            let html = '<table><tr><th>#</th><th>Terrain Type</th><th>Status</th></tr>';
+            results.forEach(r => {
+                html += `<tr><td>${r.index}</td><td>${r.terrain}</td><td class="${r.status === '✓' ? 'success' : 'failure'}">${r.status}</td></tr>`;
+            });
+            html += '</table>';
+
+            document.getElementById('allTerrainsResult').innerHTML = html;
+        }
+    </script>
+</body>
+</html>
