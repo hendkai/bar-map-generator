@@ -1408,13 +1408,89 @@
             const ctx = canvas.getContext('2d');
             canvas.width = 512;
             canvas.height = 512;
-            
+
             // Clear canvas with dark background
             ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(0, 0, 512, 512);
-            
+
             const scale = 512 / size;
-            
+            const playerCount = mapConfig.playerCount;
+
+            // Define player territory colors (semi-transparent)
+            const playerColors = [
+                'rgba(255, 100, 100, 0.2)',   // Red
+                'rgba(100, 100, 255, 0.2)',   // Blue
+                'rgba(100, 255, 100, 0.2)',   // Green
+                'rgba(255, 255, 100, 0.2)',   // Yellow
+                'rgba(255, 100, 255, 0.2)',   // Magenta
+                'rgba(100, 255, 255, 0.2)',   // Cyan
+                'rgba(255, 150, 50, 0.2)',    // Orange
+                'rgba(150, 50, 255, 0.2)'     // Purple
+            ];
+
+            // Draw territory boundaries
+            if (resourceData.territories && resourceData.territories.territories) {
+                const territories = resourceData.territories.territories;
+                const imageData = ctx.createImageData(512, 512);
+                const data = imageData.data;
+
+                for (let y = 0; y < 512; y++) {
+                    for (let x = 0; x < 512; x++) {
+                        const mapX = Math.floor(x / scale);
+                        const mapY = Math.floor(y / scale);
+                        const index = mapY * size + mapX;
+                        const player = territories[index];
+
+                        // Parse the color for this player
+                        const colorStr = playerColors[player % playerColors.length];
+                        const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+                        if (match) {
+                            const pixelIndex = (y * 512 + x) * 4;
+                            data[pixelIndex] = parseInt(match[1]);
+                            data[pixelIndex + 1] = parseInt(match[2]);
+                            data[pixelIndex + 2] = parseInt(match[3]);
+                            data[pixelIndex + 3] = Math.floor(parseFloat(match[4]) * 255);
+                        }
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+
+                // Draw territory boundary lines
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1;
+
+                for (let y = 1; y < size - 1; y++) {
+                    for (let x = 1; x < size - 1; x++) {
+                        const index = y * size + x;
+                        const currentTerritory = territories[index];
+
+                        // Check if this is a boundary pixel
+                        const rightNeighbor = territories[index + 1];
+                        const bottomNeighbor = territories[(y + 1) * size + x];
+
+                        if (currentTerritory !== rightNeighbor || currentTerritory !== bottomNeighbor) {
+                            const canvasX = Math.floor(x * scale);
+                            const canvasY = Math.floor(y * scale);
+
+                            if (currentTerritory !== rightNeighbor) {
+                                ctx.beginPath();
+                                ctx.moveTo(canvasX, canvasY);
+                                ctx.lineTo(canvasX, canvasY + Math.ceil(scale));
+                                ctx.stroke();
+                            }
+
+                            if (currentTerritory !== bottomNeighbor) {
+                                ctx.beginPath();
+                                ctx.moveTo(canvasX, canvasY);
+                                ctx.lineTo(canvasX + Math.ceil(scale), canvasY);
+                                ctx.stroke();
+                            }
+                        }
+                    }
+                }
+            }
+
             // Draw metal spots
             ctx.fillStyle = '#ffdd00';
             resourceData.metalSpots.forEach(spot => {
@@ -1424,7 +1500,7 @@
                 ctx.arc(x, y, 6, 0, 2 * Math.PI);
                 ctx.fill();
             });
-            
+
             // Draw geo spots
             ctx.fillStyle = '#ff4444';
             resourceData.geoSpots.forEach(spot => {
@@ -1434,7 +1510,7 @@
                 ctx.arc(x, y, 8, 0, 2 * Math.PI);
                 ctx.fill();
             });
-            
+
             // Draw start positions
             ctx.fillStyle = '#44ff44';
             ctx.strokeStyle = '#ffffff';
@@ -1446,7 +1522,7 @@
                 ctx.arc(x, y, 12, 0, 2 * Math.PI);
                 ctx.fill();
                 ctx.stroke();
-                
+
                 // Draw player number
                 ctx.fillStyle = '#000000';
                 ctx.font = 'bold 12px Arial';
@@ -1454,7 +1530,70 @@
                 ctx.fillText((index + 1).toString(), x, y + 4);
                 ctx.fillStyle = '#44ff44';
             });
-            
+
+            // Calculate and display statistics
+            const balance = calculateResourceBalance(resourceData, playerCount);
+
+            // Draw statistics overlay panel
+            const panelX = 10;
+            const panelY = 10;
+            const panelWidth = 200;
+            const lineHeight = 16;
+            const padding = 8;
+
+            // Semi-transparent panel background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(panelX, panelY, panelWidth, 140);
+
+            // Panel border
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(panelX, panelY, panelWidth, 140);
+
+            // Title
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('Resource Balance', panelX + padding, panelY + 20);
+
+            // Overall fairness score
+            const fairness = parseFloat(balance.summary.overallFairness);
+            const fairnessColor = fairness >= 80 ? '#44ff44' : fairness >= 60 ? '#ffdd00' : '#ff4444';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '12px Arial';
+            ctx.fillText(`Balance Score:`, panelX + padding, panelY + 40);
+            ctx.fillStyle = fairnessColor;
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText(`${fairness.toFixed(1)}%`, panelX + padding + 110, panelY + 40);
+
+            // Per-player metal totals
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '12px Arial';
+            ctx.fillText('Metal per Player:', panelX + padding, panelY + 60);
+
+            let y = panelY + 78;
+            balance.perPlayer.forEach((player, index) => {
+                const colorStr = playerColors[index % playerColors.length];
+                const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+                const rgbColor = match ? `rgb(${match[1]}, ${match[2]}, ${match[3]})` : '#ffffff';
+
+                ctx.fillStyle = rgbColor;
+                ctx.font = 'bold 11px Arial';
+                ctx.fillText(`P${player.player}:`, panelX + padding, y);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '11px Arial';
+                ctx.fillText(`${player.totalMetalValue.toFixed(1)} (${player.metalSpotCount} spots)`,
+                           panelX + padding + 35, y);
+                y += lineHeight;
+            });
+
+            // Total metal spots
+            ctx.fillStyle = '#aaaaaa';
+            ctx.font = '11px Arial';
+            ctx.fillText(`Total Metal Spots: ${balance.summary.totalMetalSpots}`,
+                       panelX + padding, panelY + 130);
+
             console.log("Resource map drawn to canvas - NO DOWNLOAD");
         }
         
