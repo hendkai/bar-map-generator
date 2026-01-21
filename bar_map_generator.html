@@ -455,6 +455,56 @@
             };
         }
 
+        // Create WebGL buffers and upload mesh data
+        function uploadMeshDataToBuffers(mesh) {
+            if (!gl) {
+                console.error('WebGL context not initialized');
+                return null;
+            }
+
+            // Create and populate vertex position buffer
+            const positionBuffer = gl.createBuffer();
+            if (!positionBuffer) {
+                console.error('Failed to create position buffer');
+                return null;
+            }
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices, gl.STATIC_DRAW);
+
+            // Create and populate vertex height buffer
+            const heightBuffer = gl.createBuffer();
+            if (!heightBuffer) {
+                console.error('Failed to create height buffer');
+                return null;
+            }
+            gl.bindBuffer(gl.ARRAY_BUFFER, heightBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, mesh.heights, gl.STATIC_DRAW);
+
+            // Create and populate index buffer
+            const indexBuffer = gl.createBuffer();
+            if (!indexBuffer) {
+                console.error('Failed to create index buffer');
+                return null;
+            }
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
+
+            const buffers = {
+                position: positionBuffer,
+                height: heightBuffer,
+                indices: indexBuffer,
+                vertexCount: mesh.vertexCount,
+                indexCount: mesh.indexCount
+            };
+
+            console.log('Mesh data uploaded to WebGL buffers:', {
+                vertices: mesh.vertexCount,
+                indices: mesh.indexCount
+            });
+
+            return buffers;
+        }
+
         // Update value displays
         function updateValueDisplays() {
             document.getElementById('noiseValue').textContent = document.getElementById('noiseStrength').value;
