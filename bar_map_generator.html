@@ -746,7 +746,42 @@
             
             console.log("Resource map drawn to canvas - NO DOWNLOAD");
         }
-        
+
+        // CONFIGURATION EXPORT/IMPORT FUNCTIONS
+        function exportConfigJSON() {
+            if (!mapConfig || Object.keys(mapConfig).length === 0) {
+                alert('Please generate a map first!');
+                return;
+            }
+
+            // Collect metadata from form fields
+            const creatorName = document.getElementById('creatorName').value.trim() || 'Anonymous';
+            const mapDescription = document.getElementById('mapDescription').value.trim() || 'No description';
+
+            // Create export object with all configuration and metadata
+            const exportData = {
+                version: '1.0',
+                timestamp: new Date().toISOString(),
+                metadata: {
+                    creator: creatorName,
+                    description: mapDescription
+                },
+                config: { ...mapConfig }
+            };
+
+            // Convert to JSON string with pretty formatting
+            const jsonString = JSON.stringify(exportData, null, 2);
+
+            // Create blob and download
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `map_config_${mapConfig.terrainType}_${mapConfig.size}x${mapConfig.size}_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
         // COMPLETE BAR MAP PACKAGE GENERATION
         async function downloadCompleteMapPackage() {
             if (!heightmapData) {
