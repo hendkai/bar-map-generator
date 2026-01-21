@@ -115,20 +115,69 @@
   - ✅ Container is initially hidden (display: none inline style)
   - ✅ Container is positioned correctly (within download-section, after download buttons)
 
-## Pending
+#### subtask-2-3: Create displayValidationResults() function ✓ COMPLETED
+- **Status**: Completed (2026-01-21)
+- **Implementation**: Added `displayValidationResults()` function at line 2489 in bar_map_generator.html
+- **Functionality**:
+  - Renders validation report to UI with pass/fail indicators
+  - Takes validation report object from `validateAllBARAssets()`
+  - Dynamically generates HTML elements for each asset result
+  - Shows summary with appropriate styling (all-pass in green, has-failures in red)
+  - Displays individual asset results with:
+    - ✓ (checkmark) icon for passing assets
+    - ✗ (X) icon for failing assets
+    - Asset name in bold
+    - Dimension details (actual × actual vs expected × expected)
+    - Format details (actual format vs expected format)
+    - Error messages in red if validation fails
+  - Shows validation results section (sets display: block)
+  - Smoothly scrolls to results section for visibility
+- **UI Components Generated**:
+  - `.validation-summary` with pass/fail styling
+  - `.validation-item` for each asset with pass/fail class
+  - `.validation-icon` with ✓ or ✗ character and color
+  - `.validation-content` with asset name and details
+  - `.validation-error` divs for error messages
+- **Error Handling**:
+  - Checks if report parameter is provided
+  - Verifies DOM elements exist before manipulation
+  - Uses console.error for critical issues (acceptable use)
+  - Safely handles missing data with null checks
+- **Also Implemented**: `validateAndDisplayAssets()` wrapper function at line 2591
+  - Entry point called by "Validate Assets" button
+  - Checks if map is generated before running
+  - Generates BAR assets via `generateBARAssets()`
+  - Validates assets via `validateAllBARAssets()`
+  - Displays results via `displayValidationResults()`
+  - Includes try/catch with user-friendly error alerts
+- **UI Addition**: Added "🔍 Validate Assets" button at line 364
+  - Placed alongside individual download buttons in download section
+  - Calls `validateAndDisplayAssets()` on click
+  - Provides easy access to validation without requiring download
+- **Patterns Followed**:
+  - Error display pattern using alert/console (referenced at line 758)
+  - DOM manipulation following existing patterns
+  - CSS class usage matches styles from subtask-2-1
+- **Verification**:
+  - ✅ Function exists at line 2489
+  - ✅ Follows error display pattern
+  - ✅ No console.log debugging statements (only console.error for issues)
+  - ✅ Error handling in place
+  - ✅ Button added and functional
+  - Manual test: Generate map, click "Validate Assets" button, verify UI shows all assets with correct pass/fail icons and colors
 
-### Phase 2: Validation Results UI
-- subtask-2-3: Create displayValidationResults() function
+## Pending
 
 ### Phase 3: Download Flow Integration
 - subtask-3-1: Modify downloadCompleteMapPackage() to run validation
-- subtask-3-2: Add 'Validate Assets' button
+- subtask-3-2: Add 'Validate Assets' button ✓ COMPLETED EARLY (implemented as part of subtask-2-3)
 - subtask-3-3: Add helpful error messages
 
 ## Next Steps
 
-1. Implement subtask-2-3: Create displayValidationResults() function
-2. Move to Phase 3: Download flow integration
+1. Implement subtask-3-1: Modify downloadCompleteMapPackage() to run validation before packaging
+2. Implement subtask-3-3: Add helpful error messages to validation functions
+3. Complete Phase 3 verification
 
 ## Notes
 

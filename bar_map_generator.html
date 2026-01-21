@@ -850,7 +850,18 @@
             try {
                 // Generate all BAR assets
                 const barAssets = generateBARAssets();
-                
+
+                // Validate assets before packaging
+                const mapUnits = mapConfig.size / 64;
+                const validation = await validateAllBARAssets(barAssets, mapUnits);
+                displayValidationResults(validation);
+
+                // Block download if validation fails
+                if (!validation.allPass) {
+                    alert('Validation failed. Please fix errors before downloading.');
+                    return;
+                }
+
                 // Generate build scripts
                 const buildScripts = generateBuildScripts(mapName);
                 
