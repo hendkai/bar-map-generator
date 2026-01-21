@@ -833,12 +833,47 @@
             return Math.max(0, score);
         }
 
+        function calculateMetalSpotValue(mapSize, playerCount, metalStrength, strategicScore, maxScore) {
+            // Base metal value depends on map size and player count
+            // Larger maps and more players require value adjustments
+
+            // Map size multiplier (larger maps get slight boost)
+            const sizeMultipliers = {
+                512: 0.9,   // Small maps - compact, faster access
+                1024: 1.0,  // Medium maps - baseline
+                2048: 1.1   // Large maps - spread out, need slightly higher values
+            };
+            const sizeMultiplier = sizeMultipliers[mapSize] || 1.0;
+
+            // Player count adjustment (more players = more competition, scale values down slightly)
+            // This ensures total map metal doesn't scale linearly with players
+            const playerAdjustment = 1.0 - (playerCount - 2) * 0.05;
+
+            // Strategic score multiplier (0.8 to 1.2 based on position quality)
+            const strategicMultiplier = 0.8 + (strategicScore / maxScore) * 0.4;
+
+            // Calculate base value using metalStrength as a baseline multiplier
+            const baseValue = metalStrength * sizeMultiplier * playerAdjustment * strategicMultiplier;
+
+            // Add some variation (±15%) for map diversity
+            const variation = 0.85 + Math.random() * 0.3;
+
+            // Final value with reasonable bounds (1.0 to 5.0 range)
+            let finalValue = baseValue * variation;
+            finalValue = Math.max(1.0, Math.min(5.0, finalValue));
+
+            return finalValue;
+        }
+
         function generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount) {
             const resourceData = {
                 metalSpots: [],
                 geoSpots: [],
                 size: size
             };
+
+            // Get metal strength parameter for value calculation
+            const metalStrength = parseFloat(document.getElementById('metalStrength').value);
 
             // Analyze terrain for strategic features
             const terrainAnalysis = analyzeTerrain(heightmapData, size, waterLevel);
@@ -857,6 +892,7 @@
 
             // Track metal spots per territory for verification
             const spotsPerTerritory = new Array(playerCount).fill(0);
+            const metalPerTerritory = new Array(playerCount).fill(0);
 
             // Generate metal spots per territory
             for (let player = 0; player < playerCount; player++) {
@@ -882,13 +918,15 @@
                 scoredPositions.sort((a, b) => b.score - a.score);
 
                 // Place metal spots strategically (prefer high-scoring positions)
+                const maxStrategicScore = scoredPositions.length > 0 ? scoredPositions[0].score : 1.0;
+
                 for (let i = 0; i < spotsForPlayer && scoredPositions.length > 0; i++) {
                     let placedSpot = false;
                     let searchIndex = 0;
 
                     // Try to place from highest-scoring positions first
                     while (!placedSpot && searchIndex < scoredPositions.length) {
-                        const { x, y } = scoredPositions[searchIndex];
+                        const { x, y, score } = scoredPositions[searchIndex];
                         const height = heightmapData[y * size + x];
 
                         // Check distance from other metal spots
@@ -902,13 +940,17 @@
                         }
 
                         if (!tooClose) {
+                            // Calculate balanced metal value based on map size, player count, and strategic score
+                            const metalValue = calculateMetalSpotValue(size, playerCount, metalStrength, score, maxStrategicScore);
+
                             resourceData.metalSpots.push({
                                 x,
                                 y,
-                                value: 2.0 + Math.random() * 2.0,
+                                value: metalValue,
                                 territory: player
                             });
                             spotsPerTerritory[player]++;
+                            metalPerTerritory[player] += metalValue;
                             placedSpot = true;
                         }
 
@@ -920,11 +962,17 @@
             // Log metal spot distribution for verification
             console.log('Metal Spot Distribution by Territory:');
             spotsPerTerritory.forEach((count, idx) => {
-                console.log(`  Player ${idx + 1}: ${count} spots`);
+                console.log(`  Player ${idx + 1}: ${count} spots, Total Metal: ${metalPerTerritory[idx].toFixed(1)} (${(metalPerTerritory[idx] / count).toFixed(2)} avg/spot)`);
             });
             const minSpots = Math.min(...spotsPerTerritory);
             const maxSpots = Math.max(...spotsPerTerritory);
-            console.log(`  Balance: ${minSpots} - ${maxSpots} (difference: ${maxSpots - minSpots})`);
+            const minMetal = Math.min(...metalPerTerritory);
+            const maxMetal = Math.max(...metalPerTerritory);
+            const avgMetal = metalPerTerritory.reduce((a, b) => a + b, 0) / playerCount;
+            console.log(`  Spot Balance: ${minSpots} - ${maxSpots} (difference: ${maxSpots - minSpots})`);
+            console.log(`  Metal Balance: ${minMetal.toFixed(1)} - ${maxMetal.toFixed(1)} (difference: ${(maxMetal - minMetal).toFixed(1)})`);
+            console.log(`  Average Metal per Player: ${avgMetal.toFixed(1)}`);
+            console.log(`  Map Size: ${size}, Player Count: ${playerCount}, Metal Strength: ${metalStrength.toFixed(1)}`);
 
             // Generate geo spots (still random, will be improved in later phase)
             for (let i = 0; i < geoSpots; i++) {
