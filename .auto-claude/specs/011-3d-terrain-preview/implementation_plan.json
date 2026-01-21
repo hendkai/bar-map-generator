@@ -164,7 +164,7 @@
             "type": "manual",
             "instructions": "Click and drag on 3D canvas to rotate camera around terrain"
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-4-2",
@@ -179,7 +179,7 @@
             "type": "manual",
             "instructions": "Scroll mouse wheel over 3D canvas to zoom in/out"
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-4-3",
@@ -194,7 +194,7 @@
             "type": "manual",
             "instructions": "Right-click and drag to pan the camera view"
           },
-          "status": "pending"
+          "status": "completed"
         }
       ]
     },
@@ -445,5 +445,5 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-01-21T19:40:41.206Z"
+  "updated_at": "2026-01-21T19:51:30.428Z"
 }
