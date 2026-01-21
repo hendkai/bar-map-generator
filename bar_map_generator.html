@@ -330,7 +330,15 @@
                     console.log(`\n🔄 Retry attempt ${retryCount}/${maxRetries}...`);
                 }
 
+                // Generate resources using smart distribution algorithms:
+                // - Territory-based balanced metal spot distribution (Voronoi regions)
+                // - Strategic placement near terrain features (hills, ridges, valleys)
+                // - Balanced metal values based on map size and player count
+                // - Strategic geo vent placement (high ground, contested areas)
+                // - Geo vent value variation by strategic importance
                 resourceData = generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount);
+
+                // Calculate resource balance metrics (fairness score, per-player totals, territory analysis)
                 balance = calculateResourceBalance(resourceData, playerCount);
                 retryCount++;
 
