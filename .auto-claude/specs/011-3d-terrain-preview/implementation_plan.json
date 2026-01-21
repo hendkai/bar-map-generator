@@ -74,7 +74,7 @@
             "command": "echo 'Mesh generation function created; check browser console for vertex count'",
             "expected": "Mesh generation function created"
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-2-2",
@@ -91,7 +91,7 @@
             "type": "manual",
             "instructions": "After mesh generation, check browser console for buffer upload confirmation"
           },
-          "status": "pending"
+          "status": "completed"
         }
       ]
     },
@@ -445,5 +445,5 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-01-21T19:30:00.000Z"
+  "updated_at": "2026-01-21T19:31:10.643Z"
 }
