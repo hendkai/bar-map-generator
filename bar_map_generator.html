@@ -833,6 +833,97 @@
             return Math.max(0, score);
         }
 
+        function calculateGeoStrategicScore(x, y, height, terrainAnalysis, size, waterLevel, territories, playerCount) {
+            let score = 0;
+            const hills = terrainAnalysis.hills;
+            const valleys = terrainAnalysis.valleys;
+
+            // Factor 1: Height advantage (geo vents prefer high ground)
+            const normalizedHeight = (height - waterLevel) / 255;
+            score += normalizedHeight * 40;
+
+            // Factor 2: Hilltop placement (geo vents on peaks are strategic)
+            let maxHillProximity = 0;
+            for (const hill of hills) {
+                const dist = Math.sqrt((x - hill.x) ** 2 + (y - hill.y) ** 2);
+                if (dist < hill.radius) {
+                    // Bonus for being on a hill
+                    const proximityScore = (1 - dist / hill.radius) * 35;
+                    maxHillProximity = Math.max(maxHillProximity, proximityScore);
+                }
+            }
+            score += maxHillProximity;
+
+            // Factor 3: Ridge positioning (between hills)
+            let ridgeScore = 0;
+            for (let i = 0; i < Math.min(hills.length, 10); i++) {
+                for (let j = i + 1; j < Math.min(hills.length, 10); j++) {
+                    const hill1 = hills[i];
+                    const hill2 = hills[j];
+
+                    const dist1 = Math.sqrt((x - hill1.x) ** 2 + (y - hill1.y) ** 2);
+                    const dist2 = Math.sqrt((x - hill2.x) ** 2 + (y - hill2.y) ** 2);
+                    const hillDist = Math.sqrt((hill1.x - hill2.x) ** 2 + (hill1.y - hill2.y) ** 2);
+
+                    if (Math.abs(dist1 + dist2 - hillDist) < 15) {
+                        const avgHeight = (hill1.height + hill2.height) / 2;
+                        if (avgHeight > waterLevel + 100) {
+                            ridgeScore = Math.max(ridgeScore, 30);
+                        }
+                    }
+                }
+            }
+            score += ridgeScore;
+
+            // Factor 4: Contested areas (near territory boundaries)
+            const territoryIndex = y * size + x;
+            const currentTerritory = territories[territoryIndex];
+            let boundaryScore = 0;
+
+            // Check surrounding cells for different territories
+            for (let dy = -3; dy <= 3; dy++) {
+                for (let dx = -3; dx <= 3; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+
+                    const checkX = x + dx;
+                    const checkY = y + dy;
+
+                    if (checkX >= 0 && checkX < size && checkY >= 0 && checkY < size) {
+                        const checkIndex = checkY * size + checkX;
+                        if (territories[checkIndex] !== currentTerritory) {
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist <= 3) {
+                                boundaryScore += (3 - dist) / 3;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Normalize boundary score (max possible is around 24)
+            boundaryScore = Math.min(boundaryScore / 24, 1) * 30;
+            score += boundaryScore;
+
+            // Factor 5: Avoid valleys (geo vents shouldn't be in low areas)
+            let minValleyDistance = Infinity;
+            for (const valley of valleys) {
+                const dist = Math.sqrt((x - valley.x) ** 2 + (y - valley.y) ** 2);
+                if (dist < minValleyDistance) {
+                    minValleyDistance = dist;
+                }
+            }
+
+            if (minValleyDistance !== Infinity && minValleyDistance < size * 0.1) {
+                const normalizedValleyDist = minValleyDistance / (size * 0.1);
+                score -= (1 - normalizedValleyDist) * 25;
+            }
+
+            // Add some randomness for variety
+            score += Math.random() * 8;
+
+            return Math.max(0, score);
+        }
+
         function calculateMetalSpotValue(mapSize, playerCount, metalStrength, strategicScore, maxScore) {
             // Base metal value depends on map size and player count
             // Larger maps and more players require value adjustments
@@ -974,35 +1065,65 @@
             console.log(`  Average Metal per Player: ${avgMetal.toFixed(1)}`);
             console.log(`  Map Size: ${size}, Player Count: ${playerCount}, Metal Strength: ${metalStrength.toFixed(1)}`);
 
-            // Generate geo spots (still random, will be improved in later phase)
-            for (let i = 0; i < geoSpots; i++) {
-                let attempts = 0;
-                let validSpot = false;
+            // Generate geo spots with strategic placement (high ground, chokepoints, contested areas)
+            console.log('Geo Spot Strategic Placement:');
 
-                while (!validSpot && attempts < 100) {
-                    const x = Math.floor(Math.random() * size);
-                    const y = Math.floor(Math.random() * size);
+            // Sample candidate positions across the map
+            const candidateStep = Math.max(size / 50, 4);
+            const candidates = [];
+
+            for (let y = 2; y < size - 2; y += candidateStep) {
+                for (let x = 2; x < size - 2; x += candidateStep) {
                     const height = heightmapData[y * size + x];
 
-                    if (height > waterLevel + 20) {
-                        // Check distance from other geo spots
-                        let tooClose = false;
-                        for (const spot of resourceData.geoSpots) {
-                            const dist = Math.sqrt((x - spot.x) ** 2 + (y - spot.y) ** 2);
-                            if (dist < size * 0.1) {
-                                tooClose = true;
-                                break;
-                            }
-                        }
-
-                        if (!tooClose) {
-                            resourceData.geoSpots.push({ x, y, value: 250 + Math.random() * 250 });
-                            validSpot = true;
-                        }
+                    if (height > waterLevel + 30) {
+                        const score = calculateGeoStrategicScore(
+                            x, y, height, terrainAnalysis, size, waterLevel,
+                            territories.territories, playerCount
+                        );
+                        candidates.push({ x, y, height, score });
                     }
-                    attempts++;
                 }
             }
+
+            // Sort by strategic score (highest first)
+            candidates.sort((a, b) => b.score - a.score);
+
+            // Place geo spots at highest-scoring locations
+            let placedGeoSpots = 0;
+            const maxGeoScore = candidates.length > 0 ? candidates[0].score : 1.0;
+
+            for (const candidate of candidates) {
+                if (placedGeoSpots >= geoSpots) break;
+
+                const { x, y, score } = candidate;
+
+                // Check distance from other geo spots
+                let tooClose = false;
+                for (const spot of resourceData.geoSpots) {
+                    const dist = Math.sqrt((x - spot.x) ** 2 + (y - spot.y) ** 2);
+                    if (dist < size * 0.12) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+
+                if (!tooClose) {
+                    // Geo value based on strategic score
+                    const geoValue = 200 + (score / maxGeoScore) * 300 + Math.random() * 50;
+                    resourceData.geoSpots.push({ x, y, value: geoValue });
+                    placedGeoSpots++;
+
+                    // Log placement details
+                    const hillBonus = terrainAnalysis.hills.some(hill => {
+                        const dist = Math.sqrt((x - hill.x) ** 2 + (y - hill.y) ** 2);
+                        return dist < hill.radius;
+                    }) ? 'On Hill' : 'Ground';
+                    console.log(`  Geo ${placedGeoSpots}: (${x}, ${y}) - Score: ${score.toFixed(1)} - ${hillBonus}`);
+                }
+            }
+
+            console.log(`  Total Geo Spots Placed: ${placedGeoSpots}`);
 
             // Add territory data to resourceData for visualization
             resourceData.territories = territories;
