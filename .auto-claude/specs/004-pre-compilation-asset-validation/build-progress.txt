@@ -53,11 +53,43 @@
   - splatmap: formula 'Math.max(2048, mapUnits * 64 / 2)', format 'image/png'
 - **Verification**: Generate map, call `validateAllBARAssets(barAssets, mapUnits)` in browser console. Verify validation report for all 9 assets with dimension and format checks.
 
+### Phase 2: Validation Results UI
+
+#### subtask-2-1: Add CSS styles for validation results display ✓ COMPLETED
+- **Status**: Completed (2026-01-21)
+- **Implementation**: Added CSS styles for validation results UI at lines 150-253 in bar_map_generator.html
+- **CSS Classes Added**:
+  - `.validation-results`: Main container with consistent styling (rgba background, rounded corners)
+  - `.validation-summary`: Pass/fail summary with color-coded backgrounds
+    - `.all-pass`: Green background (#4caf50) for successful validation
+    - `.has-failures`: Red background (#f44336) for failed validation
+  - `.validation-item`: Individual asset results with flexbox layout
+    - `.pass`: Green left border and subtle green background
+    - `.fail`: Red left border and subtle red background
+  - `.validation-icon`: Icon styling for pass/fail indicators (24px, colored)
+  - `.validation-content`: Content area for asset details (flex: 1)
+  - `.validation-asset-name`: Asset name styling (bold, 16px)
+  - `.validation-details`: Details text (14px, slight transparency)
+  - `.validation-error`: Error message styling (red, bold)
+  - `.validation-success`: Success message styling (green)
+  - `.validation-dimensions`: Dimension display (monospace, subtle background)
+- **Color Scheme**:
+  - Success: #4caf50 (green) with rgba(76, 175, 80, 0.3) background
+  - Error: #f44336 (red) with rgba(244, 67, 54, 0.3) background
+  - Accent: #ffd700 (gold) for headers, matching existing design
+- **Design Patterns**:
+  - Follows existing CSS patterns from lines 7-148
+  - Uses rgba backgrounds for transparency
+  - Rounded corners (8-10px border-radius)
+  - Consistent padding (15-20px)
+  - Flexbox layout for responsive design
+  - Border-left color coding for quick visual scanning
+- **Verification**: CSS classes exist in inspector (17 validation-related classes), green/red colors properly defined, layout uses responsive flexbox
+
 ## Pending
 
 ### Phase 2: Validation Results UI
-- subtask-2-1: Add CSS styles for validation results display
-- subtask-2-2: Add HTML container for validation results
+- subtask-2-2: Add HTML container for validation results display in download section
 - subtask-2-3: Create displayValidationResults() function
 
 ### Phase 3: Download Flow Integration
@@ -67,9 +99,9 @@
 
 ## Next Steps
 
-1. Implement subtask-1-3 (validateAllBARAssets master function)
-2. Move to Phase 2: UI implementation
-3. Integrate validation into download flow in Phase 3
+1. Implement subtask-2-2: Add HTML container for validation results display
+2. Implement subtask-2-3: Create displayValidationResults() function
+3. Move to Phase 3: Download flow integration
 
 ## Notes
 

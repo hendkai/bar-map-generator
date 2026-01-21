@@ -97,7 +97,7 @@
               "Layout is responsive"
             ]
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-2-2",
@@ -347,5 +347,5 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-01-21T19:39:12.688Z"
+  "updated_at": "2026-01-21T19:42:37.894Z"
 }
