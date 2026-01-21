@@ -251,6 +251,46 @@
             border-radius: 4px;
             font-size: 13px;
         }
+
+        .validation-fix {
+            background: rgba(255, 215, 0, 0.15);
+            border-left: 3px solid #ffd700;
+            padding: 8px 12px;
+            margin-top: 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .validation-fix strong {
+            color: #ffd700;
+        }
+
+        .validation-doc-link {
+            background: rgba(33, 150, 243, 0.15);
+            border: 2px solid #2196f3;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .validation-doc-link strong {
+            color: #64b5f6;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .validation-doc-link a {
+            color: #ffd700;
+            text-decoration: underline;
+            font-weight: bold;
+        }
+
+        .validation-doc-link a:hover {
+            color: #fff;
+        }
     </style>
 </head>
 <body>
@@ -2090,19 +2130,48 @@ https://github.com/beyond-all-reason/bar-map-generator
             // Compare dimensions
             const pass = actualDimension === expectedDimension;
 
-            // Build helpful message
+            // Build helpful message with formula evaluation shown step-by-step
             let message;
+            let fixSuggestion = null;
+
             if (pass) {
                 message = `${assetName}: ✓ Correct dimensions (${actualDimension}x${actualDimension})`;
             } else {
-                message = `${assetName}: ✗ Dimension mismatch - Expected: ${expectedDimension}x${expectedDimension} (from '${formula}'), Got: ${actualDimension}x${actualDimension}`;
+                // Show formula evaluation: e.g., "64 * 16 + 1 = 1025"
+                const formulaWithValues = formula
+                    .replace(/mapUnits/g, mapUnits)
+                    .replace(/Math\.max\((\d+),\s*(\d+)\s*\*\s*(\d+)\s*\/\s*(\d+)\)/g, (match, p1, p2, p3, p4) => {
+                        const val1 = parseInt(p1);
+                        const val2 = parseInt(p2) * mapUnits / parseInt(p4);
+                        return `Math.max(${val1}, ${val2})`;
+                    });
+
+                // Build detailed error message
+                message = `${assetName}: ✗ Wrong size - Got ${actualDimension}x${actualDimension}, need ${expectedDimension}x${expectedDimension}`;
+
+                // Add fix suggestion based on common issues
+                const diff = expectedDimension - actualDimension;
+                if (Math.abs(diff) === 1 && formula.includes('+ 1')) {
+                    fixSuggestion = `Heightmap requires +1 pixel offset. The formula is: ${formulaWithValues} = ${expectedDimension}`;
+                } else if (assetName === 'metalmap' && formula.includes('32 *')) {
+                    fixSuggestion = `Metalmap uses 32 * mapUnits. For ${mapUnits} units: 32 * ${mapUnits} = ${expectedDimension}`;
+                } else if (assetName === 'texture' && formula.includes('512 *')) {
+                    fixSuggestion = `Texture uses 512 * mapUnits. For ${mapUnits} units: 512 * ${mapUnits} = ${expectedDimension}`;
+                } else if (assetName === 'grassmap' && formula.includes('16 *')) {
+                    fixSuggestion = `Grassmap uses 16 * mapUnits. For ${mapUnits} units: 16 * ${mapUnits} = ${expectedDimension}`;
+                } else if (formula.includes('Math.max')) {
+                    fixSuggestion = `Splatmap uses max(2048, size/2). Calculated: ${formulaWithValues} = ${expectedDimension}`;
+                } else {
+                    fixSuggestion = `Formula: ${formulaWithValues} = ${expectedDimension}. Your asset is ${actualDimension}x${actualDimension}.`;
+                }
             }
 
             return {
                 pass,
                 actual: actualDimension,
                 expected: expectedDimension,
-                message
+                message,
+                fixSuggestion
             };
         }
 
@@ -2220,20 +2289,28 @@ https://github.com/beyond-all-reason/bar-map-generator
 
                 // Verify the blob was created successfully
                 if (!blob || blob.size === 0) {
+                    const fixSuggestion = `Try generating the asset again. If this persists, check browser console for details.`;
                     return {
                         pass: false,
                         format: formatMap[mimeType] || mimeType,
-                        message: `${assetName}: Failed to create ${formatMap[mimeType] || mimeType} - blob is empty or null`
+                        message: `${assetName}: Failed to create ${formatMap[mimeType] || mimeType} - blob is empty or null`,
+                        fixSuggestion
                     };
                 }
 
                 // Verify the MIME type
                 if (!blob.type.includes(mimeType.split('/')[1])) {
+                    const formatName = formatMap[mimeType] || mimeType;
+                    const fixSuggestion = mimeType === 'image/bmp'
+                        ? `BMP format may not be supported in all browsers. The map generator will convert during build.`
+                        : `Expected ${formatName} but browser created ${blob.type}. This may cause compilation issues.`;
+
                     return {
                         pass: false,
                         format: formatMap[mimeType] || mimeType,
                         actualFormat: blob.type,
-                        message: `${assetName}: Format mismatch - Expected ${mimeType}, browser returned ${blob.type}`
+                        message: `${assetName}: Format mismatch - Expected ${mimeType}, browser returned ${blob.type}`,
+                        fixSuggestion
                     };
                 }
 
@@ -2247,19 +2324,24 @@ https://github.com/beyond-all-reason/bar-map-generator
                 // Check if this is a browser support issue
                 const errorMessage = error.message.toLowerCase();
                 let helpfulMessage = `${assetName}: ✗ Format validation failed`;
+                let fixSuggestion = null;
 
                 if (errorMessage.includes('type') || errorMessage.includes('support')) {
-                    helpfulMessage += ` - Browser may not support ${mimeType} format. ${error.message}`;
+                    helpfulMessage += ` - Browser may not support ${mimeType} format.`;
+                    fixSuggestion = `Try using a modern browser (Chrome, Firefox, Edge). Some formats like BMP may have limited support.`;
                 } else if (errorMessage.includes('security')) {
-                    helpfulMessage += ` - Security error: ${error.message}`;
+                    helpfulMessage += ` - Security error.`;
+                    fixSuggestion = `This may be caused by browser security settings. Try running from a local server instead of opening the file directly.`;
                 } else {
                     helpfulMessage += ` - ${error.message}`;
+                    fixSuggestion = `Check browser console for more details.`;
                 }
 
                 return {
                     pass: false,
                     format: formatMap[mimeType] || mimeType,
-                    message: helpfulMessage
+                    message: helpfulMessage,
+                    fixSuggestion
                 };
             }
         }
@@ -2428,13 +2510,15 @@ https://github.com/beyond-all-reason/bar-map-generator
                         pass: dimensionResult.pass,
                         actual: dimensionResult.actual,
                         expected: dimensionResult.expected,
-                        message: dimensionResult.message
+                        message: dimensionResult.message,
+                        fixSuggestion: dimensionResult.fixSuggestion
                     },
                     format: {
                         pass: formatResult.pass,
                         expected: spec.format,
                         actual: formatResult.format,
-                        message: formatResult.message
+                        message: formatResult.message,
+                        fixSuggestion: formatResult.fixSuggestion
                     },
                     errors: errors.length > 0 ? errors : null
                 };
@@ -2560,12 +2644,28 @@ https://github.com/beyond-all-reason/bar-map-generator
                         const dimText = `Dimensions: ${result.dimensions.actual}×${result.dimensions.actual} ` +
                             `(expected ${result.dimensions.expected}×${result.dimensions.expected})`;
                         detailsDiv.appendChild(document.createTextNode(dimText + '\n'));
+
+                        // Add fix suggestion if dimensions failed
+                        if (!result.dimensions.pass && result.dimensions.fixSuggestion) {
+                            const fixDiv = document.createElement('div');
+                            fixDiv.className = 'validation-fix';
+                            fixDiv.innerHTML = '<strong>💡 How to fix:</strong> ' + result.dimensions.fixSuggestion;
+                            detailsDiv.appendChild(fixDiv);
+                        }
                     }
 
                     if (result.format) {
                         const formatText = `Format: ${result.format.actual || 'unknown'} ` +
                             `(expected ${result.format.expected || 'unknown'})`;
                         detailsDiv.appendChild(document.createTextNode(formatText + '\n'));
+
+                        // Add fix suggestion if format failed
+                        if (!result.format.pass && result.format.fixSuggestion) {
+                            const fixDiv = document.createElement('div');
+                            fixDiv.className = 'validation-fix';
+                            fixDiv.innerHTML = '<strong>💡 How to fix:</strong> ' + result.format.fixSuggestion;
+                            detailsDiv.appendChild(fixDiv);
+                        }
                     }
 
                     // Errors
@@ -2586,6 +2686,19 @@ https://github.com/beyond-all-reason/bar-map-generator
 
                     validationItemsDiv.appendChild(itemDiv);
                 });
+            }
+
+            // Add documentation link at the end if there are failures
+            if (!report.allPass) {
+                const docLinkDiv = document.createElement('div');
+                docLinkDiv.className = 'validation-doc-link';
+                docLinkDiv.innerHTML = `
+                    <strong>📚 Need help understanding BAR asset requirements?</strong><br>
+                    <a href="https://github.com/beyond-all-reason/bar-map-generator#asset-dimensions" target="_blank" style="color: #ffd700; text-decoration: underline;">
+                        View BAR Asset Dimension Documentation →
+                    </a>
+                `;
+                validationItemsDiv.appendChild(docLinkDiv);
             }
 
             // Show the validation results section
