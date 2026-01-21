@@ -956,6 +956,27 @@
             return finalValue;
         }
 
+        function calculateGeoVentValue(strategicScore, maxScore) {
+            // Geo vent value based on strategic importance
+            // Higher strategic score = more valuable geo vent (200-500 energy range)
+
+            // Base value (200 energy)
+            const baseValue = 200;
+
+            // Strategic bonus (0-300 energy based on score ratio)
+            // Best strategic locations get up to 500 energy
+            const strategicBonus = (strategicScore / maxScore) * 300;
+
+            // Small random variation (±25 energy) for natural feel
+            const randomVariation = Math.random() * 50 - 25;
+
+            // Final value with bounds
+            let finalValue = baseValue + strategicBonus + randomVariation;
+            finalValue = Math.max(150, Math.min(550, finalValue));
+
+            return finalValue;
+        }
+
         function generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount) {
             const resourceData = {
                 metalSpots: [],
@@ -1110,20 +1131,30 @@
 
                 if (!tooClose) {
                     // Geo value based on strategic score
-                    const geoValue = 200 + (score / maxGeoScore) * 300 + Math.random() * 50;
+                    const geoValue = calculateGeoVentValue(score, maxGeoScore);
                     resourceData.geoSpots.push({ x, y, value: geoValue });
                     placedGeoSpots++;
 
-                    // Log placement details
+                    // Log placement details with value
                     const hillBonus = terrainAnalysis.hills.some(hill => {
                         const dist = Math.sqrt((x - hill.x) ** 2 + (y - hill.y) ** 2);
                         return dist < hill.radius;
                     }) ? 'On Hill' : 'Ground';
-                    console.log(`  Geo ${placedGeoSpots}: (${x}, ${y}) - Score: ${score.toFixed(1)} - ${hillBonus}`);
+                    console.log(`  Geo ${placedGeoSpots}: (${x}, ${y}) - Score: ${score.toFixed(1)}, Value: ${geoValue.toFixed(1)} - ${hillBonus}`);
                 }
             }
 
             console.log(`  Total Geo Spots Placed: ${placedGeoSpots}`);
+
+            // Log geo vent value statistics
+            if (placedGeoSpots > 0) {
+                const geoValues = resourceData.geoSpots.map(spot => spot.value);
+                const minValue = Math.min(...geoValues);
+                const maxValue = Math.max(...geoValues);
+                const avgValue = geoValues.reduce((a, b) => a + b, 0) / placedGeoSpots;
+                console.log(`  Geo Vent Value Range: ${minValue.toFixed(1)} - ${maxValue.toFixed(1)} (average: ${avgValue.toFixed(1)})`);
+                console.log(`  Strategic Value Variation: ${((maxValue - minValue) / avgValue * 100).toFixed(1)}%`);
+            }
 
             // Add territory data to resourceData for visualization
             resourceData.territories = territories;
