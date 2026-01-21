@@ -286,6 +286,7 @@
         let terrainBuffers;
         let startPositionBuffers;
         let metalSpotBuffers;
+        let geoSpotBuffers;
         let markerShaderProgram;
 
         // Initialize WebGL context and shaders
@@ -740,6 +741,53 @@
             };
         }
 
+        // Generate marker meshes for geothermal spots (red spheres)
+        function generateGeoSpotMeshes(geoSpots, heightmap, size, waterLevel) {
+            const allVertices = [];
+            const allIndices = [];
+            let totalVertices = 0;
+            let totalIndices = 0;
+
+            const sphereRadius = size * 0.008;
+
+            geoSpots.forEach((pos) => {
+                const height = heightmap[pos.y * size + pos.x];
+                const normalizedHeight = height / 255.0;
+
+                // Convert map coordinates to terrain coordinates
+                const terrainX = (pos.x / (size - 1)) * 2.0 - 1.0;
+                const terrainZ = (pos.y / (size - 1)) * 2.0 - 1.0;
+                const terrainY = normalizedHeight + sphereRadius;
+
+                const sphere = generateSphereMesh(
+                    terrainX,
+                    terrainY,
+                    terrainZ,
+                    sphereRadius
+                );
+
+                const vertexOffset = totalVertices;
+
+                for (let i = 0; i < sphere.vertices.length; i++) {
+                    allVertices.push(sphere.vertices[i]);
+                }
+
+                for (let i = 0; i < sphere.indices.length; i++) {
+                    allIndices.push(sphere.indices[i] + vertexOffset);
+                }
+
+                totalVertices += sphere.vertexCount;
+                totalIndices += sphere.indexCount;
+            });
+
+            return {
+                vertices: new Float32Array(allVertices),
+                indices: new Uint16Array(allIndices),
+                vertexCount: totalVertices,
+                indexCount: totalIndices
+            };
+        }
+
         // Upload marker data to WebGL buffers
         function uploadMarkerDataToBuffers(mesh) {
             if (!gl) {
@@ -1064,6 +1112,26 @@
 
                 gl.useProgram(shaderProgram);
             }
+
+            // Draw geothermal spot markers (red spheres)
+            if (geoSpotBuffers && markerShaderProgram) {
+                gl.useProgram(markerShaderProgram);
+
+                gl.uniformMatrix4fv(markerShaderProgram.pMatrixUniform, false, projectionMatrix);
+                gl.uniformMatrix4fv(markerShaderProgram.mvMatrixUniform, false, modelViewMatrix);
+
+                // Red color for geothermal spots (matching 2D preview)
+                gl.uniform3f(markerShaderProgram.colorUniform, 1.0, 0.0, 0.0);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, geoSpotBuffers.position);
+                gl.vertexAttribPointer(markerShaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geoSpotBuffers.indices);
+
+                gl.drawElements(gl.TRIANGLES, geoSpotBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
+
+                gl.useProgram(shaderProgram);
+            }
         }
 
         // Render loop for continuous 3D terrain display
@@ -1130,7 +1198,8 @@
                 metalStrength: metalStrength,
                 geoSpots: geoSpots,
                 startPositions: generateStartPositions(size, playerCount, heightmapData, waterLevel),
-                metalSpotLocations: resourceData.metalSpots
+                metalSpotLocations: resourceData.metalSpots,
+                geoSpotLocations: resourceData.geoSpots
             };
             
             console.log("All data generated successfully");
@@ -1158,6 +1227,10 @@
                     // Generate and upload metal spot markers (yellow spheres)
                     const metalSpotMesh = generateMetalSpotMeshes(mapConfig.metalSpotLocations, heightmapData, size, waterLevel);
                     metalSpotBuffers = uploadMarkerDataToBuffers(metalSpotMesh);
+
+                    // Generate and upload geothermal spot markers (red spheres)
+                    const geoSpotMesh = generateGeoSpotMeshes(mapConfig.geoSpotLocations, heightmapData, size, waterLevel);
+                    geoSpotBuffers = uploadMarkerDataToBuffers(geoSpotMesh);
 
                     startRenderLoop();
                     console.log("3D terrain rendering started");
