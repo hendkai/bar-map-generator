@@ -1914,7 +1914,130 @@ https://github.com/beyond-all-reason/bar-map-generator
                 unittextures: []
             };
         }
-        
+
+        /**
+         * Validates asset dimensions against expected PyMapConv formula
+         * @param {string} assetName - Name of the asset being validated (e.g., 'heightmap', 'metalmap')
+         * @param {HTMLCanvasElement} canvas - The canvas element to validate
+         * @param {number} mapUnits - Map units (size / 64)
+         * @param {string} formula - Dimension formula as string (e.g., '64 * mapUnits + 1')
+         * @returns {Object} Validation result with pass status, actual/expected dimensions, and message
+         */
+        function validateAssetDimensions(assetName, canvas, mapUnits, formula) {
+            if (!canvas || !canvas.width || !canvas.height) {
+                return {
+                    pass: false,
+                    actual: 0,
+                    expected: 0,
+                    message: `${assetName}: Invalid canvas element`
+                };
+            }
+
+            // Canvas should be square for BAR assets
+            const actualDimension = canvas.width;
+            if (canvas.width !== canvas.height) {
+                return {
+                    pass: false,
+                    actual: `${canvas.width}x${canvas.height}`,
+                    expected: 'square',
+                    message: `${assetName}: Canvas is not square (${canvas.width}x${canvas.height})`
+                };
+            }
+
+            // Safely evaluate the dimension formula
+            let expectedDimension;
+            try {
+                // Create a function that evaluates the formula with mapUnits in scope
+                const evaluateFormula = new Function('mapUnits', `return ${formula};`);
+                expectedDimension = evaluateFormula(mapUnits);
+
+                if (typeof expectedDimension !== 'number' || isNaN(expectedDimension) || expectedDimension <= 0) {
+                    throw new Error('Formula evaluation resulted in invalid number');
+                }
+            } catch (error) {
+                return {
+                    pass: false,
+                    actual: actualDimension,
+                    expected: 'ERROR',
+                    message: `${assetName}: Invalid dimension formula '${formula}' - ${error.message}`
+                };
+            }
+
+            // Compare dimensions
+            const pass = actualDimension === expectedDimension;
+
+            // Build helpful message
+            let message;
+            if (pass) {
+                message = `${assetName}: ✓ Correct dimensions (${actualDimension}x${actualDimension})`;
+            } else {
+                message = `${assetName}: ✗ Dimension mismatch - Expected: ${expectedDimension}x${expectedDimension} (from '${formula}'), Got: ${actualDimension}x${actualDimension}`;
+            }
+
+            return {
+                pass,
+                actual: actualDimension,
+                expected: expectedDimension,
+                message
+            };
+        }
+
+        /**
+         * Test helper function to verify validateAssetDimensions works correctly
+         * Call this from browser console to test the validation function
+         */
+        function testValidateAssetDimensions() {
+            // Test case 1: Correct heightmap dimensions (1025x1025 for 16 mapUnits)
+            const correctCanvas = document.createElement('canvas');
+            correctCanvas.width = 1025;
+            correctCanvas.height = 1025;
+
+            const result1 = validateAssetDimensions('heightmap', correctCanvas, 16, '64 * mapUnits + 1');
+            console.log('Test 1 - Correct dimensions:', result1);
+            // Expected: {pass: true, actual: 1025, expected: 1025, message: "heightmap: ✓ Correct dimensions (1025x1025)"}
+
+            // Test case 2: Incorrect dimensions (1024x1024 instead of 1025x1025)
+            const wrongCanvas = document.createElement('canvas');
+            wrongCanvas.width = 1024;
+            wrongCanvas.height = 1024;
+
+            const result2 = validateAssetDimensions('heightmap', wrongCanvas, 16, '64 * mapUnits + 1');
+            console.log('Test 2 - Wrong dimensions:', result2);
+            // Expected: {pass: false, actual: 1024, expected: 1025, message: "heightmap: ✗ Dimension mismatch - Expected: 1025x1025 (from '64 * mapUnits + 1'), Got: 1024x1024"}
+
+            // Test case 3: Metalmap with correct dimensions (512x512 for 16 mapUnits)
+            const metalmapCanvas = document.createElement('canvas');
+            metalmapCanvas.width = 512;
+            metalmapCanvas.height = 512;
+
+            const result3 = validateAssetDimensions('metalmap', metalmapCanvas, 16, '32 * mapUnits');
+            console.log('Test 3 - Metalmap correct:', result3);
+            // Expected: {pass: true, actual: 512, expected: 512, message: "metalmap: ✓ Correct dimensions (512x512)"}
+
+            // Test case 4: Non-square canvas
+            const nonSquareCanvas = document.createElement('canvas');
+            nonSquareCanvas.width = 1024;
+            nonSquareCanvas.height = 512;
+
+            const result4 = validateAssetDimensions('texture', nonSquareCanvas, 16, '512 * mapUnits');
+            console.log('Test 4 - Non-square canvas:', result4);
+            // Expected: {pass: false, actual: "1024x512", expected: "square", message: "texture: Canvas is not square (1024x512)"}
+
+            // Test case 5: Invalid canvas
+            const result5 = validateAssetDimensions('test', null, 16, '64 * mapUnits + 1');
+            console.log('Test 5 - Invalid canvas:', result5);
+            // Expected: {pass: false, actual: 0, expected: 0, message: "test: Invalid canvas element"}
+
+            return {
+                test1: result1.pass === true,
+                test2: result2.pass === false,
+                test3: result3.pass === true,
+                test4: result4.pass === false,
+                test5: result5.pass === false,
+                allPassed: null // Will be set below
+            };
+        }
+
         function generateBARHeightmap() {
             const size = mapConfig.size;
             const mapUnits = size / 64;
