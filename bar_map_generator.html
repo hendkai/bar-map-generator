@@ -284,6 +284,8 @@
         let gl;
         let shaderProgram;
         let terrainBuffers;
+        let markerBuffers;
+        let markerShaderProgram;
 
         // Initialize WebGL context and shaders
         function initWebGL() {
@@ -313,6 +315,21 @@
 
             gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
             gl.enableVertexAttribArray(shaderProgram.vertexHeightAttribute);
+
+            // Create marker shader program
+            markerShaderProgram = createMarkerShaderProgram();
+            if (!markerShaderProgram) {
+                console.error('Failed to create marker shader program');
+                return false;
+            }
+
+            // Get marker shader attribute and uniform locations
+            markerShaderProgram.vertexPositionAttribute = gl.getAttribLocation(markerShaderProgram, 'aVertexPosition');
+            markerShaderProgram.pMatrixUniform = gl.getUniformLocation(markerShaderProgram, 'uPMatrix');
+            markerShaderProgram.mvMatrixUniform = gl.getUniformLocation(markerShaderProgram, 'uMVMatrix');
+            markerShaderProgram.colorUniform = gl.getUniformLocation(markerShaderProgram, 'uColor');
+
+            gl.enableVertexAttribArray(markerShaderProgram.vertexPositionAttribute);
 
             // Set up WebGL state
             gl.clearColor(0.0, 0.0, 0.0, 1.0);
@@ -405,6 +422,48 @@
             }
 
             return shader;
+        }
+
+        // Create shader program for solid-color markers
+        function createMarkerShaderProgram() {
+            const vertexShaderSource = `
+                attribute vec3 aVertexPosition;
+
+                uniform mat4 uPMatrix;
+                uniform mat4 uMVMatrix;
+
+                void main() {
+                    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+                }
+            `;
+
+            const fragmentShaderSource = `
+                precision mediump float;
+                uniform vec3 uColor;
+
+                void main() {
+                    gl_FragColor = vec4(uColor, 1.0);
+                }
+            `;
+
+            const vertexShader = compileShader(gl.VERTEX_SHADER, vertexShaderSource);
+            const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+            if (!vertexShader || !fragmentShader) {
+                return null;
+            }
+
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error('Marker shader program link failed:', gl.getProgramInfoLog(program));
+                return null;
+            }
+
+            return program;
         }
 
         // Generate terrain mesh geometry from heightmap
@@ -503,6 +562,122 @@
 
             console.log('Mesh data uploaded to WebGL buffers:', {
                 vertices: mesh.vertexCount,
+                indices: mesh.indexCount
+            });
+
+            return buffers;
+        }
+
+        // Generate cone geometry for a start position marker
+        function generateConeMesh(x, y, z, radius, height) {
+            const vertices = [];
+            const indices = [];
+            const segments = 16;
+
+            // Cone tip at top
+            vertices.push(x, y + height, z);
+
+            // Base vertices
+            for (let i = 0; i < segments; i++) {
+                const angle = (i / segments) * Math.PI * 2;
+                const px = x + Math.cos(angle) * radius;
+                const pz = z + Math.sin(angle) * radius;
+                vertices.push(px, y, pz);
+            }
+
+            // Generate triangles
+            for (let i = 0; i < segments; i++) {
+                const next = (i + 1) % segments;
+                indices.push(0, i + 1, next + 1);
+            }
+
+            return {
+                vertices: new Float32Array(vertices),
+                indices: new Uint16Array(indices),
+                vertexCount: vertices.length / 3,
+                indexCount: indices.length
+            };
+        }
+
+        // Generate marker meshes for all start positions
+        function generateMarkerMeshes(startPositions, heightmap, size, waterLevel) {
+            const allVertices = [];
+            const allIndices = [];
+            let totalVertices = 0;
+            let totalIndices = 0;
+
+            const markerRadius = size * 0.01;
+            const markerHeight = size * 0.02;
+
+            startPositions.forEach((pos) => {
+                const height = heightmap[pos.y * size + pos.x];
+                const normalizedHeight = height / 255.0;
+
+                // Convert map coordinates to terrain coordinates
+                const terrainX = (pos.x / (size - 1)) * 2.0 - 1.0;
+                const terrainZ = (pos.y / (size - 1)) * 2.0 - 1.0;
+                const terrainY = normalizedHeight;
+
+                const cone = generateConeMesh(
+                    terrainX,
+                    terrainY,
+                    terrainZ,
+                    markerRadius,
+                    markerHeight
+                );
+
+                const vertexOffset = totalVertices;
+
+                for (let i = 0; i < cone.vertices.length; i++) {
+                    allVertices.push(cone.vertices[i]);
+                }
+
+                for (let i = 0; i < cone.indices.length; i++) {
+                    allIndices.push(cone.indices[i] + vertexOffset);
+                }
+
+                totalVertices += cone.vertexCount;
+                totalIndices += cone.indexCount;
+            });
+
+            return {
+                vertices: new Float32Array(allVertices),
+                indices: new Uint16Array(allIndices),
+                vertexCount: totalVertices,
+                indexCount: totalIndices
+            };
+        }
+
+        // Upload marker data to WebGL buffers
+        function uploadMarkerDataToBuffers(mesh) {
+            if (!gl) {
+                console.error('WebGL context not initialized');
+                return null;
+            }
+
+            const positionBuffer = gl.createBuffer();
+            if (!positionBuffer) {
+                console.error('Failed to create marker position buffer');
+                return null;
+            }
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices, gl.STATIC_DRAW);
+
+            const indexBuffer = gl.createBuffer();
+            if (!indexBuffer) {
+                console.error('Failed to create marker index buffer');
+                return null;
+            }
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
+
+            const buffers = {
+                position: positionBuffer,
+                indices: indexBuffer,
+                indexCount: mesh.indexCount
+            };
+
+            console.log('Marker data uploaded to WebGL buffers:', {
                 indices: mesh.indexCount
             });
 
@@ -759,6 +934,26 @@
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, terrainBuffers.indices);
 
             gl.drawElements(gl.TRIANGLES, terrainBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
+
+            // Draw start position markers
+            if (markerBuffers && markerShaderProgram) {
+                gl.useProgram(markerShaderProgram);
+
+                gl.uniformMatrix4fv(markerShaderProgram.pMatrixUniform, false, projectionMatrix);
+                gl.uniformMatrix4fv(markerShaderProgram.mvMatrixUniform, false, modelViewMatrix);
+
+                // Green color for start positions (matching 2D preview)
+                gl.uniform3f(markerShaderProgram.colorUniform, 0.267, 1.0, 0.267);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, markerBuffers.position);
+                gl.vertexAttribPointer(markerShaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, markerBuffers.indices);
+
+                gl.drawElements(gl.TRIANGLES, markerBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
+
+                gl.useProgram(shaderProgram);
+            }
         }
 
         // Render loop for continuous 3D terrain display
@@ -845,6 +1040,10 @@
                 const mesh = generateTerrainMesh(heightmapData, size);
                 terrainBuffers = uploadMeshDataToBuffers(mesh);
                 if (terrainBuffers) {
+                    // Generate and upload start position markers
+                    const markerMesh = generateMarkerMeshes(mapConfig.startPositions, heightmapData, size, waterLevel);
+                    markerBuffers = uploadMarkerDataToBuffers(markerMesh);
+
                     startRenderLoop();
                     console.log("3D terrain rendering started");
                 }
