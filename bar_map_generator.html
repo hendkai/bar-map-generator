@@ -299,6 +299,13 @@
                 return false;
             }
 
+            // Enable OES_element_index_uint extension for large mesh support
+            // Required for UNSIGNED_INT indices (> 65535 vertices)
+            const ext = gl.getExtension('OES_element_index_uint');
+            if (!ext) {
+                console.warn('OES_element_index_uint extension not available - large maps may not render correctly');
+            }
+
             // Create shader program
             shaderProgram = createShaderProgram();
             if (!shaderProgram) {
@@ -474,13 +481,23 @@
             const heights = [];
             const indices = [];
 
-            // Scale factors for the terrain
+            // Optimize mesh resolution for large maps to maintain acceptable frame rate
+            // Large maps with full resolution would have too many vertices for real-time rendering
+            let stride = 1;
+            if (size >= 2048) {
+                stride = 4; // 2048x2048 -> 512x512 mesh (262k vertices)
+            } else if (size >= 1024) {
+                stride = 2; // 1024x1024 -> 512x512 mesh (262k vertices)
+            }
+            // 512x512 and smaller use full resolution (262k vertices or less)
+
+            const meshSize = Math.floor((size - 1) / stride) + 1;
             const scaleXZ = 1.0 / size;
             const scaleY = 1.0 / 255.0;
 
-            // Generate vertices
-            for (let z = 0; z < size; z++) {
-                for (let x = 0; x < size; x++) {
+            // Generate vertices with stride-based sampling
+            for (let z = 0; z < size; z += stride) {
+                for (let x = 0; x < size; x += stride) {
                     const index = z * size + x;
                     const height = heightmap[index];
 
@@ -496,11 +513,12 @@
             }
 
             // Generate indices for triangles
-            for (let z = 0; z < size - 1; z++) {
-                for (let x = 0; x < size - 1; x++) {
-                    const topLeft = z * size + x;
+            // Note: meshSize is the number of vertices per row in the simplified mesh
+            for (let z = 0; z < meshSize - 1; z++) {
+                for (let x = 0; x < meshSize - 1; x++) {
+                    const topLeft = z * meshSize + x;
                     const topRight = topLeft + 1;
-                    const bottomLeft = (z + 1) * size + x;
+                    const bottomLeft = (z + 1) * meshSize + x;
                     const bottomRight = bottomLeft + 1;
 
                     // First triangle (top-left, bottom-left, top-right)
@@ -514,9 +532,10 @@
             return {
                 vertices: new Float32Array(vertices),
                 heights: new Float32Array(heights),
-                indices: new Uint16Array(indices),
-                vertexCount: size * size,
-                indexCount: indices.length
+                indices: new Uint32Array(indices),
+                vertexCount: meshSize * meshSize,
+                indexCount: indices.length,
+                meshSize: meshSize
             };
         }
 
@@ -1073,7 +1092,9 @@
 
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, terrainBuffers.indices);
 
-            gl.drawElements(gl.TRIANGLES, terrainBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
+            // Use UNSIGNED_INT for large meshes (may exceed 65535 vertices)
+            // UNSIGNED_SHORT is insufficient for meshes larger than 256x256
+            gl.drawElements(gl.TRIANGLES, terrainBuffers.indexCount, gl.UNSIGNED_INT, 0);
 
             // Draw start position markers (green cones)
             if (startPositionBuffers && markerShaderProgram) {

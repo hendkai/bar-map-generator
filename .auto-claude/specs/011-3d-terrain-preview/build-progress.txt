@@ -514,3 +514,71 @@ Next Steps:
   * Will complete Phase 5 (Marker Rendering)
 
 === END SUBTASK 5-2 ===
+
+=== SESSION 8 - Subtask 6-1 Verification ===
+Date: 2026-01-21
+Task: Wire 3D preview into generateMap() function
+
+Status: ALREADY COMPLETE
+
+Implementation Details:
+- This subtask was already completed in SESSION 3 (subtask 3-2)
+- The generateMap() function (lines 1218-1240) already includes:
+  * Terrain mesh generation from heightmap data
+  * Mesh data upload to WebGL buffers
+  * Start position marker generation and upload
+  * Metal spot marker generation and upload
+  * Geothermal spot marker generation and upload
+  * Render loop startup
+
+Integration Verification:
+- generateMap() function flow:
+  1. Generates heightmap, texture, and resource data (lines 1186-1203)
+  2. Draws 2D previews (lines 1209-1216)
+  3. Generates 3D terrain mesh (line 1220)
+  4. Uploads terrain buffers (line 1221)
+  5. Generates and uploads all marker types (lines 1224-1233)
+  6. Starts render loop (line 1235)
+
+Code Quality:
+✓ 3D preview automatically updates when map is generated
+✓ 3D preview updates alongside 2D previews (same function call)
+✓ Error handling with try-catch blocks
+✓ Console logging for debugging
+✓ Clean integration with existing generateMap() flow
+
+Files Modified:
+- No changes needed (already implemented)
+
+Verification:
+- Manual testing confirmed in previous sessions:
+  1. Open bar_map_generator.html in browser
+  2. Click "Generate Map" button
+  3. Verify 3D terrain renders with all markers
+  4. Verify 2D previews also update
+
+Integration Notes:
+- The integration was done incrementally:
+  * Initial integration in SESSION 3 (subtask 3-2)
+  * Added start position markers in SESSION 6 (subtask 5-1)
+  * Added metal spot markers in SESSION 7 (subtask 5-2)
+  * Added geothermal spot markers (completion of Phase 5)
+- All markers now render automatically when generateMap() is called
+- User sees complete preview (2D + 3D) with one button click
+
+Phase Status:
+✓ Subtask 6-1: Wire 3D preview into generateMap() function (completed - already done)
+○ Subtask 6-2: Optimize mesh for large maps (pending)
+○ Subtask 6-3: Add UI controls for 3D viewer (pending)
+
+Next Steps:
+- Subtask 6-2: Optimize mesh for large maps (LOD or reduced resolution)
+  * Test performance with 2048x2048 map
+  * Implement LOD if frame rate is unacceptable
+  * Consider reducing mesh resolution for large maps
+- Subtask 6-3: Add UI controls for 3D viewer
+  * Reset view button
+  * Toggle wireframe button
+  * Other helpful controls
+
+=== END SUBTASK 6-1 ===

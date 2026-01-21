@@ -283,7 +283,7 @@
             "type": "manual",
             "instructions": "Click 'Generate Map' button and verify 3D terrain updates automatically alongside 2D previews"
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-6-2",
@@ -445,5 +445,5 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-01-21T20:08:54.392Z"
+  "updated_at": "2026-01-21T20:12:01.788Z"
 }
