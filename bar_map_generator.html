@@ -361,6 +361,7 @@
             <button onclick="downloadSpecularmap()">Specularmap (.png)</button>
             <button onclick="downloadMinimap()">Minimap (.png)</button>
             <button onclick="downloadConfig()">mapinfo.lua</button>
+            <button onclick="validateAndDisplayAssets()">🔍 Validate Assets</button>
 
             <!-- Validation Results Container -->
             <div id="validationResults" class="validation-results" style="display: none;">
@@ -2479,6 +2480,135 @@ https://github.com/beyond-all-reason/bar-map-generator
 
             mapConfig.size = originalSize; // Restore original size
             return result;
+        }
+
+        /**
+         * Display validation results in the UI with pass/fail indicators
+         * @param {Object} report - Validation report from validateAllBARAssets()
+         */
+        function displayValidationResults(report) {
+            if (!report) {
+                console.error('No validation report provided');
+                return;
+            }
+
+            // Get the validation results container
+            const validationResultsDiv = document.getElementById('validationResults');
+            const validationSummaryDiv = document.getElementById('validationSummary');
+            const validationItemsDiv = document.getElementById('validationItems');
+
+            if (!validationResultsDiv || !validationSummaryDiv || !validationItemsDiv) {
+                console.error('Validation result containers not found in DOM');
+                return;
+            }
+
+            // Clear previous results
+            validationItemsDiv.innerHTML = '';
+
+            // Set summary
+            validationSummaryDiv.textContent = report.summary || 'Validation complete';
+            validationSummaryDiv.className = 'validation-summary';
+            if (report.allPass) {
+                validationSummaryDiv.classList.add('all-pass');
+            } else {
+                validationSummaryDiv.classList.add('has-failures');
+            }
+
+            // Display each asset result
+            if (report.results && Array.isArray(report.results)) {
+                report.results.forEach(result => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'validation-item';
+                    if (result.pass) {
+                        itemDiv.classList.add('pass');
+                    } else {
+                        itemDiv.classList.add('fail');
+                    }
+
+                    // Icon
+                    const iconDiv = document.createElement('div');
+                    iconDiv.className = 'validation-icon';
+                    iconDiv.classList.add(result.pass ? 'pass' : 'fail');
+                    iconDiv.textContent = result.pass ? '✓' : '✗';
+
+                    // Content
+                    const contentDiv = document.createElement('div');
+                    contentDiv.className = 'validation-content';
+
+                    // Asset name
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'validation-asset-name';
+                    nameDiv.textContent = result.asset || 'Unknown Asset';
+                    contentDiv.appendChild(nameDiv);
+
+                    // Details
+                    const detailsDiv = document.createElement('div');
+                    detailsDiv.className = 'validation-details';
+
+                    if (result.dimensions) {
+                        const dimText = `Dimensions: ${result.dimensions.actual}×${result.dimensions.actual} ` +
+                            `(expected ${result.dimensions.expected}×${result.dimensions.expected})`;
+                        detailsDiv.appendChild(document.createTextNode(dimText + '\n'));
+                    }
+
+                    if (result.format) {
+                        const formatText = `Format: ${result.format.actual || 'unknown'} ` +
+                            `(expected ${result.format.expected || 'unknown'})`;
+                        detailsDiv.appendChild(document.createTextNode(formatText + '\n'));
+                    }
+
+                    // Errors
+                    if (result.errors && result.errors.length > 0) {
+                        result.errors.forEach(error => {
+                            const errorDiv = document.createElement('div');
+                            errorDiv.className = 'validation-error';
+                            errorDiv.textContent = error;
+                            detailsDiv.appendChild(errorDiv);
+                        });
+                    }
+
+                    contentDiv.appendChild(detailsDiv);
+
+                    // Assemble item
+                    itemDiv.appendChild(iconDiv);
+                    itemDiv.appendChild(contentDiv);
+
+                    validationItemsDiv.appendChild(itemDiv);
+                });
+            }
+
+            // Show the validation results section
+            validationResultsDiv.style.display = 'block';
+
+            // Scroll to validation results
+            validationResultsDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        /**
+         * Validate all BAR assets and display the results
+         * This is the entry point called by the "Validate Assets" button
+         */
+        async function validateAndDisplayAssets() {
+            if (!heightmapData) {
+                alert('Please generate a map first!');
+                return;
+            }
+
+            const mapUnits = mapConfig.size / 64;
+
+            try {
+                // Generate BAR assets
+                const barAssets = generateBARAssets();
+
+                // Validate all assets
+                const validationReport = await validateAllBARAssets(barAssets, mapUnits);
+
+                // Display results
+                displayValidationResults(validationReport);
+            } catch (error) {
+                console.error('Error validating assets:', error);
+                alert('Error validating assets: ' + error.message);
+            }
         }
 
         function generateBARHeightmap() {
