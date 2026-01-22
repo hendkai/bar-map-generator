@@ -219,13 +219,18 @@
                 <label>Metal Spots: <span class="value-display" id="metalValue">20</span>
                     <input type="range" id="metalSpots" min="10" max="50" step="2" value="20">
                 </label>
-                
+
                 <label>Metal Strength: <span class="value-display" id="metalStrengthValue">2.0</span>
                     <input type="range" id="metalStrength" min="1.0" max="5.0" step="0.1" value="2.0">
                 </label>
-                
+
                 <label>Geo Spots: <span class="value-display" id="geoValue">4</span>
                     <input type="range" id="geoSpots" min="2" max="12" step="1" value="4">
+                </label>
+
+                <label style="margin-top: 15px;">
+                    <input type="checkbox" id="showTerritories" checked style="width: auto; margin-right: 8px;">
+                    Show Territory Overlay (Voronoi Regions)
                 </label>
             </div>
 
@@ -1301,8 +1306,70 @@
             // Generate all data
             heightmapData = generateHeightmap(size, terrainType, noiseStrength, heightVariation, waterLevel, smoothing);
             textureData = generateTextureMap(size, heightmapData, waterLevel);
-            resourceData = generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount);
-            
+
+            // Auto-retry logic for balanced resource distribution
+            const minFairnessScore = 80;
+            const maxRetries = 10;
+            let balance;
+            let retryCount = 0;
+
+            console.log(`\n=== RESOURCE GENERATION WITH AUTO-RETRY ===`);
+            console.log(`Target Fairness Score: ${minFairnessScore}%`);
+            console.log(`Maximum Retry Attempts: ${maxRetries}`);
+
+            do {
+                if (retryCount > 0) {
+                    console.log(`\n🔄 Retry attempt ${retryCount}/${maxRetries}...`);
+                }
+
+                // Generate resources using smart distribution algorithms:
+                // - Territory-based balanced metal spot distribution (Voronoi regions)
+                // - Strategic placement near terrain features (hills, ridges, valleys)
+                // - Balanced metal values based on map size and player count
+                // - Strategic geo vent placement (high ground, contested areas)
+                // - Geo vent value variation by strategic importance
+                resourceData = generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount);
+
+                // Calculate resource balance metrics (fairness score, per-player totals, territory analysis)
+                balance = calculateResourceBalance(resourceData, playerCount);
+                retryCount++;
+
+                console.log(`Attempt ${retryCount}: Fairness Score = ${balance.summary.overallFairness}/100`);
+
+                if (parseFloat(balance.summary.overallFairness) >= minFairnessScore) {
+                    console.log(`✅ Target fairness score achieved!`);
+                    break;
+                } else if (retryCount < maxRetries) {
+                    console.log(`⚠️  Fairness score below ${minFairnessScore}%, regenerating...`);
+                }
+            } while (retryCount < maxRetries && parseFloat(balance.summary.overallFairness) < minFairnessScore);
+
+            if (retryCount === maxRetries && parseFloat(balance.summary.overallFairness) < minFairnessScore) {
+                console.log(`⚠️  Warning: Could not achieve target fairness score after ${maxRetries} attempts`);
+                console.log(`Using best attempt: ${balance.summary.overallFairness}/100`);
+            } else {
+                console.log(`✅ Fair distribution achieved in ${retryCount} attempt${retryCount > 1 ? 's' : ''}`);
+            }
+
+            // Calculate and log resource balance
+            console.log('\n=== RESOURCE BALANCE ANALYSIS ===');
+            console.log('Per-Player Resource Totals:');
+            balance.perPlayer.forEach(p => {
+                console.log(`  Player ${p.player}: ${p.metalSpotCount} spots, ${p.totalMetalValue.toFixed(1)} total metal (${p.avgMetalPerSpot.toFixed(2)} avg/spot)`);
+            });
+            console.log('\nTerritory Analysis:');
+            balance.territoryAnalysis.forEach(t => {
+                console.log(`  Player ${t.player}: ${t.territorySize.toLocaleString()} pixels (${t.territoryPercent.toFixed(1)}%), Balance: ${t.territoryBalance.toFixed(1)}%`);
+            });
+            console.log('\nFairness Metrics:');
+            console.log(`  Spot Distribution CV: ${balance.summary.spotDistributionCV}%`);
+            console.log(`  Metal Distribution CV: ${balance.summary.metalDistributionCV}%`);
+            console.log(`  Territory Distribution CV: ${balance.summary.territoryDistributionCV}%`);
+            console.log(`  Overall Fairness Score: ${balance.summary.overallFairness}/100`);
+            console.log(`  Total Metal Spots: ${balance.summary.totalMetalSpots}`);
+            console.log(`  Avg Metal per Spot: ${balance.summary.avgMetalPerSpot}`);
+            console.log('================================\n');
+
             mapConfig = {
                 size: size,
                 terrainType: terrainType,
@@ -1480,23 +1547,272 @@
                     const index = y * size + x;
                     let sum = 0;
                     let count = 0;
-                    
+
                     for (let dy = -1; dy <= 1; dy++) {
                         for (let dx = -1; dx <= 1; dx++) {
                             sum += data[(y + dy) * size + (x + dx)];
                             count++;
                         }
                     }
-                    
+
                     newData[index] = sum / count;
                 }
             }
-            
+
             for (let i = 0; i < data.length; i++) {
                 data[i] = newData[i];
             }
         }
-        
+
+        // Terrain Analysis Utility Functions
+        function calculateSlope(heightmapData, size) {
+            const slopeData = new Array(size * size);
+
+            for (let y = 1; y < size - 1; y++) {
+                for (let x = 1; x < size - 1; x++) {
+                    const index = y * size + x;
+
+                    const center = heightmapData[index];
+                    const left = heightmapData[y * size + (x - 1)];
+                    const right = heightmapData[y * size + (x + 1)];
+                    const top = heightmapData[(y - 1) * size + x];
+                    const bottom = heightmapData[(y + 1) * size + x];
+
+                    const dzdx = (right - left) / 2;
+                    const dzdy = (bottom - top) / 2;
+
+                    slopeData[index] = Math.sqrt(dzdx * dzdx + dzdy * dzdy);
+                }
+            }
+
+            for (let x = 0; x < size; x++) {
+                slopeData[x] = 0;
+                slopeData[(size - 1) * size + x] = 0;
+            }
+            for (let y = 0; y < size; y++) {
+                slopeData[y * size] = 0;
+                slopeData[y * size + (size - 1)] = 0;
+            }
+
+            return slopeData;
+        }
+
+        function identifyHills(heightmapData, size, waterLevel) {
+            const hills = [];
+            const visited = new Set();
+            const heightThreshold = waterLevel + 80;
+
+            for (let y = 2; y < size - 2; y++) {
+                for (let x = 2; x < size - 2; x++) {
+                    const index = y * size + x;
+                    const height = heightmapData[index];
+
+                    if (height > heightThreshold && !visited.has(index)) {
+                        let isPeak = true;
+                        let neighborCount = 0;
+                        let lowerNeighborCount = 0;
+
+                        for (let dy = -2; dy <= 2; dy++) {
+                            for (let dx = -2; dx <= 2; dx++) {
+                                if (dx === 0 && dy === 0) continue;
+
+                                const neighborIndex = (y + dy) * size + (x + dx);
+                                const neighborHeight = heightmapData[neighborIndex];
+                                neighborCount++;
+
+                                if (neighborHeight >= height) {
+                                    isPeak = false;
+                                } else if (neighborHeight < height - 10) {
+                                    lowerNeighborCount++;
+                                }
+                            }
+                        }
+
+                        if (isPeak || lowerNeighborCount > neighborCount * 0.6) {
+                            const peakIndex = index;
+                            const hill = {
+                                x: x,
+                                y: y,
+                                height: height,
+                                radius: 0
+                            };
+
+                            let maxRadius = 0;
+                            for (let r = 1; r < 15; r++) {
+                                let pointsAtRadius = 0;
+                                let pointsAboveThreshold = 0;
+
+                                for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
+                                    const checkX = Math.round(x + Math.cos(angle) * r);
+                                    const checkY = Math.round(y + Math.sin(angle) * r);
+
+                                    if (checkX >= 0 && checkX < size && checkY >= 0 && checkY < size) {
+                                        pointsAtRadius++;
+                                        const checkHeight = heightmapData[checkY * size + checkX];
+                                        if (checkHeight > waterLevel + 30) {
+                                            pointsAboveThreshold++;
+                                        }
+                                    }
+                                }
+
+                                if (pointsAboveThreshold / pointsAtRadius > 0.5) {
+                                    maxRadius = r;
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            hill.radius = maxRadius;
+                            hills.push(hill);
+
+                            for (let dy = -maxRadius; dy <= maxRadius; dy++) {
+                                for (let dx = -maxRadius; dx <= maxRadius; dx++) {
+                                    const visitX = x + dx;
+                                    const visitY = y + dy;
+                                    if (visitX >= 0 && visitX < size && visitY >= 0 && visitY < size) {
+                                        const dist = Math.sqrt(dx * dx + dy * dy);
+                                        if (dist <= maxRadius) {
+                                            visited.add(visitY * size + visitX);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return hills;
+        }
+
+        function findValleys(heightmapData, size, waterLevel) {
+            const valleys = [];
+            const visited = new Set();
+            const maxHeightThreshold = waterLevel + 50;
+
+            for (let y = 2; y < size - 2; y++) {
+                for (let x = 2; x < size - 2; x++) {
+                    const index = y * size + x;
+                    const height = heightmapData[index];
+
+                    if (height > waterLevel + 5 && height < maxHeightThreshold && !visited.has(index)) {
+                        let isValleyBottom = true;
+                        let neighborCount = 0;
+                        let higherNeighborCount = 0;
+
+                        for (let dy = -2; dy <= 2; dy++) {
+                            for (let dx = -2; dx <= 2; dx++) {
+                                if (dx === 0 && dy === 0) continue;
+
+                                const neighborIndex = (y + dy) * size + (x + dx);
+                                const neighborHeight = heightmapData[neighborIndex];
+                                neighborCount++;
+
+                                if (neighborHeight < height) {
+                                    isValleyBottom = false;
+                                } else if (neighborHeight > height + 10) {
+                                    higherNeighborCount++;
+                                }
+                            }
+                        }
+
+                        if (isValleyBottom || higherNeighborCount > neighborCount * 0.6) {
+                            const valley = {
+                                x: x,
+                                y: y,
+                                height: height,
+                                radius: 0
+                            };
+
+                            let maxRadius = 0;
+                            for (let r = 1; r < 12; r++) {
+                                let pointsAtRadius = 0;
+                                let pointsBelowThreshold = 0;
+
+                                for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
+                                    const checkX = Math.round(x + Math.cos(angle) * r);
+                                    const checkY = Math.round(y + Math.sin(angle) * r);
+
+                                    if (checkX >= 0 && checkX < size && checkY >= 0 && checkY < size) {
+                                        pointsAtRadius++;
+                                        const checkHeight = heightmapData[checkY * size + checkX];
+                                        if (checkHeight < maxHeightThreshold && checkHeight > waterLevel + 5) {
+                                            pointsBelowThreshold++;
+                                        }
+                                    }
+                                }
+
+                                if (pointsBelowThreshold / pointsAtRadius > 0.5) {
+                                    maxRadius = r;
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            valley.radius = maxRadius;
+                            valleys.push(valley);
+
+                            for (let dy = -maxRadius; dy <= maxRadius; dy++) {
+                                for (let dx = -maxRadius; dx <= maxRadius; dx++) {
+                                    const visitX = x + dx;
+                                    const visitY = y + dy;
+                                    if (visitX >= 0 && visitX < size && visitY >= 0 && visitY < size) {
+                                        const dist = Math.sqrt(dx * dx + dy * dy);
+                                        if (dist <= maxRadius) {
+                                            visited.add(visitY * size + visitX);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return valleys;
+        }
+
+        function analyzeTerrain(heightmapData, size, waterLevel) {
+            const slopeData = calculateSlope(heightmapData, size);
+            const hills = identifyHills(heightmapData, size, waterLevel);
+            const valleys = findValleys(heightmapData, size, waterLevel);
+
+            return {
+                slope: slopeData,
+                hills: hills,
+                valleys: valleys
+            };
+        }
+
+        function generateVoronoiTerritories(startPositions, size) {
+            const territories = new Int8Array(size * size);
+
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const index = y * size + x;
+                    let nearestPlayer = 0;
+                    let minDistance = Infinity;
+
+                    for (let i = 0; i < startPositions.length; i++) {
+                        const pos = startPositions[i];
+                        const dist = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
+
+                        if (dist < minDistance) {
+                            minDistance = dist;
+                            nearestPlayer = i;
+                        }
+                    }
+
+                    territories[index] = nearestPlayer;
+                }
+            }
+
+            return {
+                territories: territories,
+                startPositions: startPositions
+            };
+        }
+
         function generateTextureMap(size, heightmapData, waterLevel) {
             const textureData = new Array(size * size * 4); // RGBA
             
@@ -1537,24 +1853,279 @@
             return textureData;
         }
         
+        function calculateStrategicScore(x, y, height, terrainAnalysis, size, waterLevel) {
+            let score = 0;
+            const hills = terrainAnalysis.hills;
+            const valleys = terrainAnalysis.valleys;
+
+            // Factor 1: Height advantage (higher is better for metal spots)
+            const normalizedHeight = (height - waterLevel) / 255;
+            score += normalizedHeight * 30;
+
+            // Factor 2: Proximity to hills (closer is better)
+            let minHillDistance = Infinity;
+            for (const hill of hills) {
+                const dist = Math.sqrt((x - hill.x) ** 2 + (y - hill.y) ** 2);
+                if (dist < minHillDistance) {
+                    minHillDistance = dist;
+                }
+            }
+
+            if (minHillDistance !== Infinity) {
+                // Score decreases with distance from hills
+                const normalizedDist = Math.min(minHillDistance / (size * 0.15), 1);
+                score += (1 - normalizedDist) * 40;
+            }
+
+            // Factor 3: Ridge positioning (between two hills is strategic)
+            let ridgeScore = 0;
+            for (let i = 0; i < hills.length; i++) {
+                for (let j = i + 1; j < hills.length; j++) {
+                    const hill1 = hills[i];
+                    const hill2 = hills[j];
+
+                    // Check if position lies approximately on the line between hills
+                    const dist1 = Math.sqrt((x - hill1.x) ** 2 + (y - hill1.y) ** 2);
+                    const dist2 = Math.sqrt((x - hill2.x) ** 2 + (y - hill2.y) ** 2);
+                    const hillDist = Math.sqrt((hill1.x - hill2.x) ** 2 + (hill1.y - hill2.y) ** 2);
+
+                    if (Math.abs(dist1 + dist2 - hillDist) < 20) {
+                        // Position is on ridge between hills
+                        ridgeScore = Math.max(ridgeScore, 25);
+                    }
+                }
+            }
+            score += ridgeScore;
+
+            // Factor 4: Avoid deep valleys (penalty)
+            let minValleyDistance = Infinity;
+            for (const valley of valleys) {
+                const dist = Math.sqrt((x - valley.x) ** 2 + (y - valley.y) ** 2);
+                if (dist < minValleyDistance) {
+                    minValleyDistance = dist;
+                }
+            }
+
+            if (minValleyDistance !== Infinity && minValleyDistance < size * 0.08) {
+                // Penalty for being in or very near a valley
+                const normalizedValleyDist = minValleyDistance / (size * 0.08);
+                score -= (1 - normalizedValleyDist) * 15;
+            }
+
+            // Add some randomness to prevent predictable patterns
+            score += Math.random() * 10;
+
+            return Math.max(0, score);
+        }
+
+        function calculateGeoStrategicScore(x, y, height, terrainAnalysis, size, waterLevel, territories, playerCount) {
+            let score = 0;
+            const hills = terrainAnalysis.hills;
+            const valleys = terrainAnalysis.valleys;
+
+            // Factor 1: Height advantage (geo vents prefer high ground)
+            const normalizedHeight = (height - waterLevel) / 255;
+            score += normalizedHeight * 40;
+
+            // Factor 2: Hilltop placement (geo vents on peaks are strategic)
+            let maxHillProximity = 0;
+            for (const hill of hills) {
+                const dist = Math.sqrt((x - hill.x) ** 2 + (y - hill.y) ** 2);
+                if (dist < hill.radius) {
+                    // Bonus for being on a hill
+                    const proximityScore = (1 - dist / hill.radius) * 35;
+                    maxHillProximity = Math.max(maxHillProximity, proximityScore);
+                }
+            }
+            score += maxHillProximity;
+
+            // Factor 3: Ridge positioning (between hills)
+            let ridgeScore = 0;
+            for (let i = 0; i < Math.min(hills.length, 10); i++) {
+                for (let j = i + 1; j < Math.min(hills.length, 10); j++) {
+                    const hill1 = hills[i];
+                    const hill2 = hills[j];
+
+                    const dist1 = Math.sqrt((x - hill1.x) ** 2 + (y - hill1.y) ** 2);
+                    const dist2 = Math.sqrt((x - hill2.x) ** 2 + (y - hill2.y) ** 2);
+                    const hillDist = Math.sqrt((hill1.x - hill2.x) ** 2 + (hill1.y - hill2.y) ** 2);
+
+                    if (Math.abs(dist1 + dist2 - hillDist) < 15) {
+                        const avgHeight = (hill1.height + hill2.height) / 2;
+                        if (avgHeight > waterLevel + 100) {
+                            ridgeScore = Math.max(ridgeScore, 30);
+                        }
+                    }
+                }
+            }
+            score += ridgeScore;
+
+            // Factor 4: Contested areas (near territory boundaries)
+            const territoryIndex = y * size + x;
+            const currentTerritory = territories[territoryIndex];
+            let boundaryScore = 0;
+
+            // Check surrounding cells for different territories
+            for (let dy = -3; dy <= 3; dy++) {
+                for (let dx = -3; dx <= 3; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+
+                    const checkX = x + dx;
+                    const checkY = y + dy;
+
+                    if (checkX >= 0 && checkX < size && checkY >= 0 && checkY < size) {
+                        const checkIndex = checkY * size + checkX;
+                        if (territories[checkIndex] !== currentTerritory) {
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist <= 3) {
+                                boundaryScore += (3 - dist) / 3;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Normalize boundary score (max possible is around 24)
+            boundaryScore = Math.min(boundaryScore / 24, 1) * 30;
+            score += boundaryScore;
+
+            // Factor 5: Avoid valleys (geo vents shouldn't be in low areas)
+            let minValleyDistance = Infinity;
+            for (const valley of valleys) {
+                const dist = Math.sqrt((x - valley.x) ** 2 + (y - valley.y) ** 2);
+                if (dist < minValleyDistance) {
+                    minValleyDistance = dist;
+                }
+            }
+
+            if (minValleyDistance !== Infinity && minValleyDistance < size * 0.1) {
+                const normalizedValleyDist = minValleyDistance / (size * 0.1);
+                score -= (1 - normalizedValleyDist) * 25;
+            }
+
+            // Add some randomness for variety
+            score += Math.random() * 8;
+
+            return Math.max(0, score);
+        }
+
+        function calculateMetalSpotValue(mapSize, playerCount, metalStrength, strategicScore, maxScore) {
+            // Base metal value depends on map size and player count
+            // Larger maps and more players require value adjustments
+
+            // Map size multiplier (larger maps get slight boost)
+            const sizeMultipliers = {
+                512: 0.9,   // Small maps - compact, faster access
+                1024: 1.0,  // Medium maps - baseline
+                2048: 1.1   // Large maps - spread out, need slightly higher values
+            };
+            const sizeMultiplier = sizeMultipliers[mapSize] || 1.0;
+
+            // Player count adjustment (more players = more competition, scale values down slightly)
+            // This ensures total map metal doesn't scale linearly with players
+            const playerAdjustment = 1.0 - (playerCount - 2) * 0.05;
+
+            // Strategic score multiplier (0.8 to 1.2 based on position quality)
+            const strategicMultiplier = 0.8 + (strategicScore / maxScore) * 0.4;
+
+            // Calculate base value using metalStrength as a baseline multiplier
+            const baseValue = metalStrength * sizeMultiplier * playerAdjustment * strategicMultiplier;
+
+            // Add some variation (±15%) for map diversity
+            const variation = 0.85 + Math.random() * 0.3;
+
+            // Final value with reasonable bounds (1.0 to 5.0 range)
+            let finalValue = baseValue * variation;
+            finalValue = Math.max(1.0, Math.min(5.0, finalValue));
+
+            return finalValue;
+        }
+
+        function calculateGeoVentValue(strategicScore, maxScore) {
+            // Geo vent value based on strategic importance
+            // Higher strategic score = more valuable geo vent (200-500 energy range)
+
+            // Base value (200 energy)
+            const baseValue = 200;
+
+            // Strategic bonus (0-300 energy based on score ratio)
+            // Best strategic locations get up to 500 energy
+            const strategicBonus = (strategicScore / maxScore) * 300;
+
+            // Small random variation (±25 energy) for natural feel
+            const randomVariation = Math.random() * 50 - 25;
+
+            // Final value with bounds
+            let finalValue = baseValue + strategicBonus + randomVariation;
+            finalValue = Math.max(150, Math.min(550, finalValue));
+
+            return finalValue;
+        }
+
         function generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount) {
             const resourceData = {
                 metalSpots: [],
                 geoSpots: [],
                 size: size
             };
-            
-            // Generate metal spots
-            for (let i = 0; i < metalSpots; i++) {
-                let attempts = 0;
-                let validSpot = false;
-                
-                while (!validSpot && attempts < 100) {
-                    const x = Math.floor(Math.random() * size);
-                    const y = Math.floor(Math.random() * size);
-                    const height = heightmapData[y * size + x];
-                    
-                    if (height > waterLevel + 10) {
+
+            // Get metal strength parameter for value calculation
+            const metalStrength = parseFloat(document.getElementById('metalStrength').value);
+
+            // Analyze terrain for strategic features
+            const terrainAnalysis = analyzeTerrain(heightmapData, size, waterLevel);
+            console.log(`Strategic Placement: Found ${terrainAnalysis.hills.length} hills, ${terrainAnalysis.valleys.length} valleys`);
+
+            // Generate start positions for territory division
+            const startPositions = generateStartPositions(size, playerCount, heightmapData, waterLevel);
+
+            // Generate Voronoi territories
+            const voronoiData = generateVoronoiTerritories(startPositions, size);
+            const territories = voronoiData.territories;
+
+            // Calculate metal spots per player (balanced distribution)
+            const baseSpotsPerPlayer = Math.floor(metalSpots / playerCount);
+            const extraSpots = metalSpots % playerCount;
+
+            // Track metal spots per territory for verification
+            const spotsPerTerritory = new Array(playerCount).fill(0);
+            const metalPerTerritory = new Array(playerCount).fill(0);
+
+            // Generate metal spots per territory
+            for (let player = 0; player < playerCount; player++) {
+                // Calculate spots for this player (some get +1 for balance)
+                const spotsForPlayer = baseSpotsPerPlayer + (player < extraSpots ? 1 : 0);
+
+                // Collect and score valid positions within this player's territory
+                const scoredPositions = [];
+                for (let y = 0; y < size; y++) {
+                    for (let x = 0; x < size; x++) {
+                        const index = y * size + x;
+                        if (territories[index] === player) {
+                            const height = heightmapData[index];
+                            if (height > waterLevel + 10) {
+                                const score = calculateStrategicScore(x, y, height, terrainAnalysis, size, waterLevel);
+                                scoredPositions.push({ x, y, score });
+                            }
+                        }
+                    }
+                }
+
+                // Sort positions by strategic score (descending)
+                scoredPositions.sort((a, b) => b.score - a.score);
+
+                // Place metal spots strategically (prefer high-scoring positions)
+                const maxStrategicScore = scoredPositions.length > 0 ? scoredPositions[0].score : 1.0;
+
+                for (let i = 0; i < spotsForPlayer && scoredPositions.length > 0; i++) {
+                    let placedSpot = false;
+                    let searchIndex = 0;
+
+                    // Try to place from highest-scoring positions first
+                    while (!placedSpot && searchIndex < scoredPositions.length) {
+                        const { x, y, score } = scoredPositions[searchIndex];
+                        const height = heightmapData[y * size + x];
+
                         // Check distance from other metal spots
                         let tooClose = false;
                         for (const spot of resourceData.metalSpots) {
@@ -1564,49 +2135,225 @@
                                 break;
                             }
                         }
-                        
+
                         if (!tooClose) {
-                            resourceData.metalSpots.push({ x, y, value: 2.0 + Math.random() * 2.0 });
-                            validSpot = true;
+                            // Calculate balanced metal value based on map size, player count, and strategic score
+                            const metalValue = calculateMetalSpotValue(size, playerCount, metalStrength, score, maxStrategicScore);
+
+                            resourceData.metalSpots.push({
+                                x,
+                                y,
+                                value: metalValue,
+                                territory: player
+                            });
+                            spotsPerTerritory[player]++;
+                            metalPerTerritory[player] += metalValue;
+                            placedSpot = true;
                         }
+
+                        searchIndex++;
                     }
-                    attempts++;
                 }
             }
-            
-            // Generate geo spots
-            for (let i = 0; i < geoSpots; i++) {
-                let attempts = 0;
-                let validSpot = false;
-                
-                while (!validSpot && attempts < 100) {
-                    const x = Math.floor(Math.random() * size);
-                    const y = Math.floor(Math.random() * size);
+
+            // Log metal spot distribution for verification
+            console.log('Metal Spot Distribution by Territory:');
+            spotsPerTerritory.forEach((count, idx) => {
+                console.log(`  Player ${idx + 1}: ${count} spots, Total Metal: ${metalPerTerritory[idx].toFixed(1)} (${(metalPerTerritory[idx] / count).toFixed(2)} avg/spot)`);
+            });
+            const minSpots = Math.min(...spotsPerTerritory);
+            const maxSpots = Math.max(...spotsPerTerritory);
+            const minMetal = Math.min(...metalPerTerritory);
+            const maxMetal = Math.max(...metalPerTerritory);
+            const avgMetal = metalPerTerritory.reduce((a, b) => a + b, 0) / playerCount;
+            console.log(`  Spot Balance: ${minSpots} - ${maxSpots} (difference: ${maxSpots - minSpots})`);
+            console.log(`  Metal Balance: ${minMetal.toFixed(1)} - ${maxMetal.toFixed(1)} (difference: ${(maxMetal - minMetal).toFixed(1)})`);
+            console.log(`  Average Metal per Player: ${avgMetal.toFixed(1)}`);
+            console.log(`  Map Size: ${size}, Player Count: ${playerCount}, Metal Strength: ${metalStrength.toFixed(1)}`);
+
+            // Generate geo spots with strategic placement (high ground, chokepoints, contested areas)
+            console.log('Geo Spot Strategic Placement:');
+
+            // Sample candidate positions across the map
+            const candidateStep = Math.max(size / 50, 4);
+            const candidates = [];
+
+            for (let y = 2; y < size - 2; y += candidateStep) {
+                for (let x = 2; x < size - 2; x += candidateStep) {
                     const height = heightmapData[y * size + x];
-                    
-                    if (height > waterLevel + 20) {
-                        // Check distance from other geo spots
-                        let tooClose = false;
-                        for (const spot of resourceData.geoSpots) {
-                            const dist = Math.sqrt((x - spot.x) ** 2 + (y - spot.y) ** 2);
-                            if (dist < size * 0.1) {
-                                tooClose = true;
-                                break;
-                            }
-                        }
-                        
-                        if (!tooClose) {
-                            resourceData.geoSpots.push({ x, y, value: 250 + Math.random() * 250 });
-                            validSpot = true;
-                        }
+
+                    if (height > waterLevel + 30) {
+                        const score = calculateGeoStrategicScore(
+                            x, y, height, terrainAnalysis, size, waterLevel,
+                            territories.territories, playerCount
+                        );
+                        candidates.push({ x, y, height, score });
                     }
-                    attempts++;
                 }
             }
-            
+
+            // Sort by strategic score (highest first)
+            candidates.sort((a, b) => b.score - a.score);
+
+            // Place geo spots at highest-scoring locations
+            let placedGeoSpots = 0;
+            const maxGeoScore = candidates.length > 0 ? candidates[0].score : 1.0;
+
+            for (const candidate of candidates) {
+                if (placedGeoSpots >= geoSpots) break;
+
+                const { x, y, score } = candidate;
+
+                // Check distance from other geo spots
+                let tooClose = false;
+                for (const spot of resourceData.geoSpots) {
+                    const dist = Math.sqrt((x - spot.x) ** 2 + (y - spot.y) ** 2);
+                    if (dist < size * 0.12) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+
+                if (!tooClose) {
+                    // Geo value based on strategic score
+                    const geoValue = calculateGeoVentValue(score, maxGeoScore);
+                    resourceData.geoSpots.push({ x, y, value: geoValue });
+                    placedGeoSpots++;
+
+                    // Log placement details with value
+                    const hillBonus = terrainAnalysis.hills.some(hill => {
+                        const dist = Math.sqrt((x - hill.x) ** 2 + (y - hill.y) ** 2);
+                        return dist < hill.radius;
+                    }) ? 'On Hill' : 'Ground';
+                    console.log(`  Geo ${placedGeoSpots}: (${x}, ${y}) - Score: ${score.toFixed(1)}, Value: ${geoValue.toFixed(1)} - ${hillBonus}`);
+                }
+            }
+
+            console.log(`  Total Geo Spots Placed: ${placedGeoSpots}`);
+
+            // Log geo vent value statistics
+            if (placedGeoSpots > 0) {
+                const geoValues = resourceData.geoSpots.map(spot => spot.value);
+                const minValue = Math.min(...geoValues);
+                const maxValue = Math.max(...geoValues);
+                const avgValue = geoValues.reduce((a, b) => a + b, 0) / placedGeoSpots;
+                console.log(`  Geo Vent Value Range: ${minValue.toFixed(1)} - ${maxValue.toFixed(1)} (average: ${avgValue.toFixed(1)})`);
+                console.log(`  Strategic Value Variation: ${((maxValue - minValue) / avgValue * 100).toFixed(1)}%`);
+            }
+
+            // Add territory data to resourceData for visualization
+            resourceData.territories = territories;
+            resourceData.spotsPerTerritory = spotsPerTerritory;
+
             return resourceData;
         }
-        
+
+        function calculateResourceBalance(resourceData, playerCount) {
+            const balance = {
+                perPlayer: [],
+                territoryAnalysis: [],
+                fairnessScore: 0,
+                summary: {}
+            };
+
+            // Calculate per-player resource totals
+            for (let player = 0; player < playerCount; player++) {
+                const playerSpots = resourceData.metalSpots.filter(spot => spot.territory === player);
+                const totalMetal = playerSpots.reduce((sum, spot) => sum + spot.value, 0);
+                const avgMetalPerSpot = playerSpots.length > 0 ? totalMetal / playerSpots.length : 0;
+
+                balance.perPlayer.push({
+                    player: player + 1,
+                    metalSpotCount: playerSpots.length,
+                    totalMetalValue: totalMetal,
+                    avgMetalPerSpot: avgMetalPerSpot
+                });
+            }
+
+            // Analyze territories
+            if (resourceData.territories && resourceData.territories.territories) {
+                const territoryMap = resourceData.territories.territories;
+                const size = resourceData.size;
+                const totalPixels = size * size;
+
+                for (let player = 0; player < playerCount; player++) {
+                    let territoryPixels = 0;
+                    let landPixels = 0;
+
+                    for (let i = 0; i < territoryMap.length; i++) {
+                        if (territoryMap[i] === player) {
+                            territoryPixels++;
+                        }
+                    }
+
+                    // Calculate land area from spots (approximate using metal spot locations)
+                    const playerSpots = resourceData.metalSpots.filter(spot => spot.territory === player);
+                    landPixels = playerSpots.length * 100; // Approximate land area per spot
+
+                    const territoryPercent = (territoryPixels / totalPixels) * 100;
+                    const expectedPercent = 100 / playerCount;
+                    const territoryBalance = (territoryPercent / expectedPercent) * 100;
+
+                    balance.territoryAnalysis.push({
+                        player: player + 1,
+                        territorySize: territoryPixels,
+                        territoryPercent: territoryPercent,
+                        landArea: landPixels,
+                        territoryBalance: territoryBalance
+                    });
+                }
+            }
+
+            // Calculate fairness scores using coefficient of variation (CV)
+            // CV = (standard deviation / mean) * 100
+            // Lower CV = more balanced distribution
+            const calculateCV = (values) => {
+                if (values.length === 0) return 0;
+                const mean = values.reduce((a, b) => a + b, 0) / values.length;
+                if (mean === 0) return 0;
+                const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+                const stdDev = Math.sqrt(variance);
+                return (stdDev / mean) * 100;
+            };
+
+            const spotCounts = balance.perPlayer.map(p => p.metalSpotCount);
+            const metalTotals = balance.perPlayer.map(p => p.totalMetalValue);
+            const territorySizes = balance.territoryAnalysis.map(t => t.territorySize);
+
+            const spotCV = calculateCV(spotCounts);
+            const metalCV = calculateCV(metalTotals);
+            const territoryCV = calculateCV(territorySizes);
+
+            // Overall fairness score (0-100, higher is better)
+            // CV of 0% = 100% fair, CV of 25%+ = 0% fair
+            const cvToFairness = (cv) => Math.max(0, 100 - (cv * 4));
+
+            const spotFairness = cvToFairness(spotCV);
+            const metalFairness = cvToFairness(metalCV);
+            const territoryFairness = cvToFairness(territoryCV);
+
+            // Weighted average: metal distribution is most important
+            balance.fairnessScore = (
+                metalFairness * 0.5 +
+                spotFairness * 0.3 +
+                territoryFairness * 0.2
+            );
+
+            balance.summary = {
+                spotDistributionCV: spotCV.toFixed(1),
+                metalDistributionCV: metalCV.toFixed(1),
+                territoryDistributionCV: territoryCV.toFixed(1),
+                spotFairness: spotFairness.toFixed(1),
+                metalFairness: metalFairness.toFixed(1),
+                territoryFairness: territoryFairness.toFixed(1),
+                overallFairness: balance.fairnessScore.toFixed(1),
+                totalMetalSpots: resourceData.metalSpots.length,
+                avgMetalPerSpot: (metalTotals.reduce((a, b) => a + b, 0) / resourceData.metalSpots.length).toFixed(2)
+            };
+
+            return balance;
+        }
+
         function generateStartPositions(size, playerCount, heightmapData, waterLevel) {
             const positions = [];
             const radius = size * 0.35;
@@ -1692,23 +2439,115 @@
             const ctx = canvas.getContext('2d');
             canvas.width = 512;
             canvas.height = 512;
-            
+
             // Clear canvas with dark background
             ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(0, 0, 512, 512);
-            
+
             const scale = 512 / size;
-            
-            // Draw metal spots
-            ctx.fillStyle = '#ffdd00';
+            const playerCount = mapConfig.playerCount;
+            const showTerritories = document.getElementById('showTerritories').checked;
+
+            // Define player territory colors (semi-transparent)
+            const playerColors = [
+                'rgba(255, 100, 100, 0.2)',   // Red
+                'rgba(100, 100, 255, 0.2)',   // Blue
+                'rgba(100, 255, 100, 0.2)',   // Green
+                'rgba(255, 255, 100, 0.2)',   // Yellow
+                'rgba(255, 100, 255, 0.2)',   // Magenta
+                'rgba(100, 255, 255, 0.2)',   // Cyan
+                'rgba(255, 150, 50, 0.2)',    // Orange
+                'rgba(150, 50, 255, 0.2)'     // Purple
+            ];
+
+            // Define solid player colors for metal spots
+            const playerSpotColors = [
+                '#ff6464',   // Red
+                '#6464ff',   // Blue
+                '#64ff64',   // Green
+                '#ffff64',   // Yellow
+                '#ff64ff',   // Magenta
+                '#64ffff',   // Cyan
+                '#ff9632',   // Orange
+                '#9632ff'    // Purple
+            ];
+
+            // Draw territory boundaries (only if checkbox is checked)
+            if (showTerritories && resourceData.territories && resourceData.territories.territories) {
+                const territories = resourceData.territories.territories;
+                const imageData = ctx.createImageData(512, 512);
+                const data = imageData.data;
+
+                for (let y = 0; y < 512; y++) {
+                    for (let x = 0; x < 512; x++) {
+                        const mapX = Math.floor(x / scale);
+                        const mapY = Math.floor(y / scale);
+                        const index = mapY * size + mapX;
+                        const player = territories[index];
+
+                        // Parse the color for this player
+                        const colorStr = playerColors[player % playerColors.length];
+                        const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+                        if (match) {
+                            const pixelIndex = (y * 512 + x) * 4;
+                            data[pixelIndex] = parseInt(match[1]);
+                            data[pixelIndex + 1] = parseInt(match[2]);
+                            data[pixelIndex + 2] = parseInt(match[3]);
+                            data[pixelIndex + 3] = Math.floor(parseFloat(match[4]) * 255);
+                        }
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+
+                // Draw territory boundary lines
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1;
+
+                for (let y = 1; y < size - 1; y++) {
+                    for (let x = 1; x < size - 1; x++) {
+                        const index = y * size + x;
+                        const currentTerritory = territories[index];
+
+                        // Check if this is a boundary pixel
+                        const rightNeighbor = territories[index + 1];
+                        const bottomNeighbor = territories[(y + 1) * size + x];
+
+                        if (currentTerritory !== rightNeighbor || currentTerritory !== bottomNeighbor) {
+                            const canvasX = Math.floor(x * scale);
+                            const canvasY = Math.floor(y * scale);
+
+                            if (currentTerritory !== rightNeighbor) {
+                                ctx.beginPath();
+                                ctx.moveTo(canvasX, canvasY);
+                                ctx.lineTo(canvasX, canvasY + Math.ceil(scale));
+                                ctx.stroke();
+                            }
+
+                            if (currentTerritory !== bottomNeighbor) {
+                                ctx.beginPath();
+                                ctx.moveTo(canvasX, canvasY);
+                                ctx.lineTo(canvasX + Math.ceil(scale), canvasY);
+                                ctx.stroke();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Draw metal spots - color by territory/player
             resourceData.metalSpots.forEach(spot => {
                 const x = spot.x * scale;
                 const y = spot.y * scale;
                 ctx.beginPath();
                 ctx.arc(x, y, 6, 0, 2 * Math.PI);
+
+                // Use player-specific color for this spot
+                const playerColor = playerSpotColors[spot.territory % playerSpotColors.length];
+                ctx.fillStyle = playerColor;
                 ctx.fill();
             });
-            
+
             // Draw geo spots
             ctx.fillStyle = '#ff4444';
             resourceData.geoSpots.forEach(spot => {
@@ -1718,7 +2557,7 @@
                 ctx.arc(x, y, 8, 0, 2 * Math.PI);
                 ctx.fill();
             });
-            
+
             // Draw start positions
             ctx.fillStyle = '#44ff44';
             ctx.strokeStyle = '#ffffff';
@@ -1730,7 +2569,7 @@
                 ctx.arc(x, y, 12, 0, 2 * Math.PI);
                 ctx.fill();
                 ctx.stroke();
-                
+
                 // Draw player number
                 ctx.fillStyle = '#000000';
                 ctx.font = 'bold 12px Arial';
@@ -1738,7 +2577,70 @@
                 ctx.fillText((index + 1).toString(), x, y + 4);
                 ctx.fillStyle = '#44ff44';
             });
-            
+
+            // Calculate and display statistics
+            const balance = calculateResourceBalance(resourceData, playerCount);
+
+            // Draw statistics overlay panel
+            const panelX = 10;
+            const panelY = 10;
+            const panelWidth = 200;
+            const lineHeight = 16;
+            const padding = 8;
+
+            // Semi-transparent panel background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(panelX, panelY, panelWidth, 140);
+
+            // Panel border
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(panelX, panelY, panelWidth, 140);
+
+            // Title
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('Resource Balance', panelX + padding, panelY + 20);
+
+            // Overall fairness score
+            const fairness = parseFloat(balance.summary.overallFairness);
+            const fairnessColor = fairness >= 80 ? '#44ff44' : fairness >= 60 ? '#ffdd00' : '#ff4444';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '12px Arial';
+            ctx.fillText(`Balance Score:`, panelX + padding, panelY + 40);
+            ctx.fillStyle = fairnessColor;
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText(`${fairness.toFixed(1)}%`, panelX + padding + 110, panelY + 40);
+
+            // Per-player metal totals
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '12px Arial';
+            ctx.fillText('Metal per Player:', panelX + padding, panelY + 60);
+
+            let y = panelY + 78;
+            balance.perPlayer.forEach((player, index) => {
+                const colorStr = playerColors[index % playerColors.length];
+                const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+                const rgbColor = match ? `rgb(${match[1]}, ${match[2]}, ${match[3]})` : '#ffffff';
+
+                ctx.fillStyle = rgbColor;
+                ctx.font = 'bold 11px Arial';
+                ctx.fillText(`P${player.player}:`, panelX + padding, y);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '11px Arial';
+                ctx.fillText(`${player.totalMetalValue.toFixed(1)} (${player.metalSpotCount} spots)`,
+                           panelX + padding + 35, y);
+                y += lineHeight;
+            });
+
+            // Total metal spots
+            ctx.fillStyle = '#aaaaaa';
+            ctx.font = '11px Arial';
+            ctx.fillText(`Total Metal Spots: ${balance.summary.totalMetalSpots}`,
+                       panelX + padding, panelY + 130);
+
             console.log("Resource map drawn to canvas - NO DOWNLOAD");
         }
 
