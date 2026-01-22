@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,7 +15,7 @@
             color: white;
             min-height: 100vh;
         }
-        
+
         .container {
             max-width: 1400px;
             margin: 0 auto;
@@ -23,47 +24,48 @@
             padding: 30px;
             backdrop-filter: blur(10px);
         }
-        
+
         h1 {
             text-align: center;
             margin-bottom: 30px;
             font-size: 2.5em;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
         }
-        
+
         .controls {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
-        
+
         .control-group {
             background: rgba(255, 255, 255, 0.1);
             padding: 20px;
             border-radius: 10px;
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        
+
         .control-group h3 {
             margin-top: 0;
             color: #ffd700;
             border-bottom: 2px solid #ffd700;
             padding-bottom: 10px;
         }
-        
+
         label {
             display: block;
             margin: 15px 0 5px 0;
             font-weight: bold;
         }
-        
+
         input[type="range"] {
             width: 100%;
             margin: 5px 0;
         }
-        
-        input[type="number"], input[type="text"], select, input[type="file"] {
+
+        input[type="number"],
+        select {
             width: 100%;
             padding: 8px;
             border: none;
@@ -72,18 +74,6 @@
             color: #333;
         }
 
-        textarea {
-            width: 100%;
-            padding: 8px;
-            border: none;
-            border-radius: 5px;
-            background: rgba(255, 255, 255, 0.9);
-            color: #333;
-            resize: vertical;
-            min-height: 80px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
         button {
             background: linear-gradient(45deg, #ff6b6b, #ff8e53);
             color: white;
@@ -96,43 +86,43 @@
             transition: transform 0.2s;
             margin: 10px;
         }
-        
+
         button:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
         }
-        
+
         .button-container {
             text-align: center;
             margin: 30px 0;
         }
-        
+
         .canvas-container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             gap: 30px;
             margin-top: 30px;
         }
-        
+
         .canvas-wrapper {
             text-align: center;
             background: rgba(255, 255, 255, 0.1);
             padding: 20px;
             border-radius: 10px;
         }
-        
+
         canvas {
             border: 2px solid rgba(255, 255, 255, 0.3);
             border-radius: 10px;
             max-width: 100%;
             height: auto;
         }
-        
+
         .canvas-wrapper h3 {
             color: #ffd700;
             margin-bottom: 15px;
         }
-        
+
         .info {
             background: rgba(255, 255, 255, 0.1);
             padding: 20px;
@@ -140,7 +130,7 @@
             margin-top: 20px;
             border-left: 4px solid #ffd700;
         }
-        
+
         .download-section {
             margin-top: 30px;
             text-align: center;
@@ -148,7 +138,7 @@
             padding: 20px;
             border-radius: 10px;
         }
-        
+
         .value-display {
             display: inline-block;
             background: rgba(255, 255, 255, 0.2);
@@ -305,10 +295,11 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>🗺️ Beyond All Reason Map Generator</h1>
-        
+
         <div class="controls">
             <div class="control-group">
                 <h3>Map Basics</h3>
@@ -319,7 +310,7 @@
                         <option value="2048">2048x2048 (Large)</option>
                     </select>
                 </label>
-                
+
                 <label>Terrain Type:
                     <select id="terrainType">
                         <option value="continental">Continental</option>
@@ -329,7 +320,7 @@
                         <option value="flat">Flat</option>
                     </select>
                 </label>
-                
+
                 <label>Player Count:
                     <select id="playerCount">
                         <option value="2">2 Players</option>
@@ -339,26 +330,26 @@
                     </select>
                 </label>
             </div>
-            
+
             <div class="control-group">
                 <h3>Terrain Parameters</h3>
                 <label>Noise Strength: <span class="value-display" id="noiseValue">0.5</span>
                     <input type="range" id="noiseStrength" min="0.1" max="1.0" step="0.1" value="0.5">
                 </label>
-                
+
                 <label>Height Variation: <span class="value-display" id="heightValue">128</span>
                     <input type="range" id="heightVariation" min="50" max="255" step="5" value="128">
                 </label>
-                
+
                 <label>Water Level: <span class="value-display" id="waterValue">64</span>
                     <input type="range" id="waterLevel" min="0" max="128" step="4" value="64">
                 </label>
-                
+
                 <label>Smoothing: <span class="value-display" id="smoothValue">2</span>
                     <input type="range" id="smoothing" min="0" max="5" step="1" value="2">
                 </label>
             </div>
-            
+
             <div class="control-group">
                 <h3>Resources</h3>
                 <label>Metal Spots: <span class="value-display" id="metalValue">20</span>
@@ -378,51 +369,28 @@
                     Show Territory Overlay (Voronoi Regions)
                 </label>
             </div>
-
-            <div class="control-group">
-                <h3>Map Metadata</h3>
-                <label>Creator Name:
-                    <input type="text" id="creatorName" placeholder="Enter your name" maxlength="100">
-                </label>
-
-                <label>Description:
-                    <textarea id="mapDescription" placeholder="Enter a description for this map" maxlength="500"></textarea>
-                </label>
-            </div>
         </div>
-        
+
         <div class="button-container">
             <button onclick="generateMap()">🎲 Generate Map (Preview Only)</button>
             <button onclick="randomizeSettings()">⚡ Randomize Settings</button>
+            <button onclick="shareToCommunity()">🌐 Share to Community</button>
         </div>
-        
+
         <div class="canvas-container">
             <div class="canvas-wrapper">
                 <h3>Heightmap</h3>
                 <canvas id="heightmapCanvas" width="512" height="512"></canvas>
             </div>
-            
+
             <div class="canvas-wrapper">
                 <h3>Texture Map</h3>
                 <canvas id="textureCanvas" width="512" height="512"></canvas>
             </div>
-            
+
             <div class="canvas-wrapper">
                 <h3>Resource Map</h3>
                 <canvas id="resourceCanvas" width="512" height="512"></canvas>
-            </div>
-        </div>
-
-        <div class="canvas-container">
-            <div class="canvas-wrapper">
-                <h3>3D Terrain Preview</h3>
-                <canvas id="terrain3dCanvas" width="512" height="512"></canvas>
-                <div style="margin-top: 15px; text-align: center;">
-                    <button onclick="resetCameraView()">🔄 Reset View</button>
-                    <button onclick="toggleWireframe()">📐 Toggle Wireframe</button>
-                    <button onclick="zoomIn()">🔍+ Zoom In</button>
-                    <button onclick="zoomOut()">🔍- Zoom Out</button>
-                </div>
             </div>
         </div>
 
@@ -431,7 +399,8 @@
             <button onclick="downloadCompleteMapPackage()">🎯 Download Complete BAR Map Package (.zip)</button>
             <br>
             <p style="margin: 15px 0; font-size: 14px; opacity: 0.8;">
-                ⚠️ <strong>Experimental:</strong> Generates all assets + automatic build script. May not work reliably yet!
+                ⚠️ <strong>Experimental:</strong> Generates all assets + automatic build script. May not work reliably
+                yet!
             </p>
             <hr style="margin: 20px 0; border: 1px solid rgba(255,255,255,0.2);">
             <h4>Individual Files:</h4>
@@ -452,34 +421,6 @@
             </div>
         </div>
 
-        <div class="download-section">
-            <h3>⚙️ Configuration Import/Export</h3>
-            <p style="margin: 15px 0; font-size: 14px; opacity: 0.8;">
-                Save and share your map configurations as JSON files or copy-pasteable text strings.
-            </p>
-
-            <!-- Export Section -->
-            <div style="margin-bottom: 20px;">
-                <strong>Export Configuration:</strong><br>
-                <button onclick="exportConfigJSON()">📄 Export Config (JSON)</button>
-                <button onclick="exportConfigText()">📋 Copy Config (Text)</button>
-            </div>
-
-            <!-- Import from File Section -->
-            <div style="margin-bottom: 20px;">
-                <strong>Import from File:</strong><br>
-                <input type="file" id="configFileInput" accept=".json" style="margin-bottom: 10px;">
-                <button onclick="importConfigFromFile()">📁 Import from File</button>
-            </div>
-
-            <!-- Import from Text Section -->
-            <div>
-                <strong>Import from Text:</strong><br>
-                <textarea id="configTextInput" placeholder="Paste your configuration string here..." style="margin-bottom: 10px;"></textarea>
-                <button onclick="importConfigFromText()">📝 Import from Text</button>
-            </div>
-        </div>
-
         <div class="info">
             <h3>💡 Usage Instructions</h3>
             <p><strong>⚠️ Development Status:</strong> This tool is experimental and may not work reliably yet.</p>
@@ -487,941 +428,14 @@
             <p><strong>2. Download Package:</strong> Click "Download Complete BAR Map Package" (experimental).</p>
             <p><strong>3. Run Build Script:</strong> Extract the ZIP and run the included build script.</p>
             <p><strong>4. Install Map:</strong> Copy the generated .sd7 file to your BAR maps folder.</p>
-            <p><strong>Requirements:</strong> Python 3.x and Spring Map Tools (PyMapConv) - downloaded automatically if not present.</p>
+            <p><strong>Requirements:</strong> Python 3.x and Spring Map Tools (PyMapConv) - downloaded automatically if
+                not present.</p>
         </div>
     </div>
 
     <script>
         let heightmapData, textureData, resourceData;
         let mapConfig = {};
-
-        // WebGL 3D Terrain Preview Variables
-        let gl;
-        let shaderProgram;
-        let terrainBuffers;
-        let startPositionBuffers;
-        let metalSpotBuffers;
-        let geoSpotBuffers;
-        let markerShaderProgram;
-
-        // Initialize WebGL context and shaders
-        function initWebGL() {
-            const canvas = document.getElementById('terrain3dCanvas');
-            gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-
-            if (!gl) {
-                console.error('WebGL not supported');
-                return false;
-            }
-
-            // Enable OES_element_index_uint extension for large mesh support
-            // Required for UNSIGNED_INT indices (> 65535 vertices)
-            const ext = gl.getExtension('OES_element_index_uint');
-            if (!ext) {
-                console.warn('OES_element_index_uint extension not available - large maps may not render correctly');
-            }
-
-            // Create shader program
-            shaderProgram = createShaderProgram();
-            if (!shaderProgram) {
-                console.error('Failed to create shader program');
-                return false;
-            }
-
-            gl.useProgram(shaderProgram);
-
-            // Get attribute and uniform locations
-            shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, 'aVertexPosition');
-            shaderProgram.vertexHeightAttribute = gl.getAttribLocation(shaderProgram, 'aVertexHeight');
-            shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, 'uPMatrix');
-            shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, 'uMVMatrix');
-            shaderProgram.waterLevelUniform = gl.getUniformLocation(shaderProgram, 'uWaterLevel');
-
-            gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
-            gl.enableVertexAttribArray(shaderProgram.vertexHeightAttribute);
-
-            // Create marker shader program
-            markerShaderProgram = createMarkerShaderProgram();
-            if (!markerShaderProgram) {
-                console.error('Failed to create marker shader program');
-                return false;
-            }
-
-            // Get marker shader attribute and uniform locations
-            markerShaderProgram.vertexPositionAttribute = gl.getAttribLocation(markerShaderProgram, 'aVertexPosition');
-            markerShaderProgram.pMatrixUniform = gl.getUniformLocation(markerShaderProgram, 'uPMatrix');
-            markerShaderProgram.mvMatrixUniform = gl.getUniformLocation(markerShaderProgram, 'uMVMatrix');
-            markerShaderProgram.colorUniform = gl.getUniformLocation(markerShaderProgram, 'uColor');
-
-            gl.enableVertexAttribArray(markerShaderProgram.vertexPositionAttribute);
-
-            // Set up WebGL state
-            gl.clearColor(0.0, 0.0, 0.0, 1.0);
-            gl.enable(gl.DEPTH_TEST);
-
-            console.log('WebGL initialized successfully');
-            return true;
-        }
-
-        function createShaderProgram() {
-            const vertexShaderSource = `
-                attribute vec3 aVertexPosition;
-                attribute float aVertexHeight;
-
-                uniform mat4 uPMatrix;
-                uniform mat4 uMVMatrix;
-
-                varying float vHeight;
-
-                void main() {
-                    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
-                    vHeight = aVertexHeight;
-                }
-            `;
-
-            const fragmentShaderSource = `
-                precision mediump float;
-
-                varying float vHeight;
-                uniform float uWaterLevel;
-
-                void main() {
-                    vec3 color;
-
-                    // Height-based terrain coloring (matches generateTextureMap pattern)
-                    // Water: RGB(30, 100, 200) -> vec3(0.118, 0.392, 0.784)
-                    if (vHeight < uWaterLevel) {
-                        color = vec3(0.118, 0.392, 0.784);
-                    }
-                    // Sand/Beach: RGB(255, 230, 150) -> vec3(1.0, 0.902, 0.588)
-                    else if (vHeight < uWaterLevel + 20.0) {
-                        color = vec3(1.0, 0.902, 0.588);
-                    }
-                    // Grass: RGB(50, 150, 50) -> vec3(0.196, 0.588, 0.196)
-                    else if (vHeight < uWaterLevel + 80.0) {
-                        color = vec3(0.196, 0.588, 0.196);
-                    }
-                    // Rock: RGB(120, 120, 120) -> vec3(0.471, 0.471, 0.471)
-                    else if (vHeight < uWaterLevel + 120.0) {
-                        color = vec3(0.471, 0.471, 0.471);
-                    }
-                    // Snow: RGB(255, 255, 255) -> vec3(1.0, 1.0, 1.0)
-                    else {
-                        color = vec3(1.0, 1.0, 1.0);
-                    }
-
-                    gl_FragColor = vec4(color, 1.0);
-                }
-            `;
-
-            const vertexShader = compileShader(gl.VERTEX_SHADER, vertexShaderSource);
-            const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
-
-            if (!vertexShader || !fragmentShader) {
-                return null;
-            }
-
-            const program = gl.createProgram();
-            gl.attachShader(program, vertexShader);
-            gl.attachShader(program, fragmentShader);
-            gl.linkProgram(program);
-
-            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                console.error('Shader program link failed:', gl.getProgramInfoLog(program));
-                return null;
-            }
-
-            return program;
-        }
-
-        function compileShader(type, source) {
-            const shader = gl.createShader(type);
-            gl.shaderSource(shader, source);
-            gl.compileShader(shader);
-
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-                gl.deleteShader(shader);
-                return null;
-            }
-
-            return shader;
-        }
-
-        // Create shader program for solid-color markers
-        function createMarkerShaderProgram() {
-            const vertexShaderSource = `
-                attribute vec3 aVertexPosition;
-
-                uniform mat4 uPMatrix;
-                uniform mat4 uMVMatrix;
-
-                void main() {
-                    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
-                }
-            `;
-
-            const fragmentShaderSource = `
-                precision mediump float;
-                uniform vec3 uColor;
-
-                void main() {
-                    gl_FragColor = vec4(uColor, 1.0);
-                }
-            `;
-
-            const vertexShader = compileShader(gl.VERTEX_SHADER, vertexShaderSource);
-            const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
-
-            if (!vertexShader || !fragmentShader) {
-                return null;
-            }
-
-            const program = gl.createProgram();
-            gl.attachShader(program, vertexShader);
-            gl.attachShader(program, fragmentShader);
-            gl.linkProgram(program);
-
-            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                console.error('Marker shader program link failed:', gl.getProgramInfoLog(program));
-                return null;
-            }
-
-            return program;
-        }
-
-        // Generate terrain mesh geometry from heightmap
-        function generateTerrainMesh(heightmap, size) {
-            const vertices = [];
-            const heights = [];
-            const indices = [];
-
-            // Optimize mesh resolution for large maps to maintain acceptable frame rate
-            // Large maps with full resolution would have too many vertices for real-time rendering
-            let stride = 1;
-            if (size >= 2048) {
-                stride = 4; // 2048x2048 -> 512x512 mesh (262k vertices)
-            } else if (size >= 1024) {
-                stride = 2; // 1024x1024 -> 512x512 mesh (262k vertices)
-            }
-            // 512x512 and smaller use full resolution (262k vertices or less)
-
-            const meshSize = Math.floor((size - 1) / stride) + 1;
-            const scaleXZ = 1.0 / size;
-            const scaleY = 1.0 / 255.0;
-
-            // Generate vertices with stride-based sampling
-            for (let z = 0; z < size; z += stride) {
-                for (let x = 0; x < size; x += stride) {
-                    const index = z * size + x;
-                    const height = heightmap[index];
-
-                    // Position: x, y (height), z
-                    // Center the terrain around (0, 0, 0)
-                    const posX = (x / (size - 1)) * 2.0 - 1.0;
-                    const posY = height * scaleY;
-                    const posZ = (z / (size - 1)) * 2.0 - 1.0;
-
-                    vertices.push(posX, posY, posZ);
-                    heights.push(height);
-                }
-            }
-
-            // Generate indices for triangles
-            // Note: meshSize is the number of vertices per row in the simplified mesh
-            for (let z = 0; z < meshSize - 1; z++) {
-                for (let x = 0; x < meshSize - 1; x++) {
-                    const topLeft = z * meshSize + x;
-                    const topRight = topLeft + 1;
-                    const bottomLeft = (z + 1) * meshSize + x;
-                    const bottomRight = bottomLeft + 1;
-
-                    // First triangle (top-left, bottom-left, top-right)
-                    indices.push(topLeft, bottomLeft, topRight);
-
-                    // Second triangle (top-right, bottom-left, bottom-right)
-                    indices.push(topRight, bottomLeft, bottomRight);
-                }
-            }
-
-            return {
-                vertices: new Float32Array(vertices),
-                heights: new Float32Array(heights),
-                indices: new Uint32Array(indices),
-                vertexCount: meshSize * meshSize,
-                indexCount: indices.length,
-                meshSize: meshSize
-            };
-        }
-
-        // Create WebGL buffers and upload mesh data
-        function uploadMeshDataToBuffers(mesh) {
-            if (!gl) {
-                console.error('WebGL context not initialized');
-                return null;
-            }
-
-            // Create and populate vertex position buffer
-            const positionBuffer = gl.createBuffer();
-            if (!positionBuffer) {
-                console.error('Failed to create position buffer');
-                return null;
-            }
-            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices, gl.STATIC_DRAW);
-
-            // Create and populate vertex height buffer
-            const heightBuffer = gl.createBuffer();
-            if (!heightBuffer) {
-                console.error('Failed to create height buffer');
-                return null;
-            }
-            gl.bindBuffer(gl.ARRAY_BUFFER, heightBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, mesh.heights, gl.STATIC_DRAW);
-
-            // Create and populate index buffer
-            const indexBuffer = gl.createBuffer();
-            if (!indexBuffer) {
-                console.error('Failed to create index buffer');
-                return null;
-            }
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
-
-            const buffers = {
-                position: positionBuffer,
-                height: heightBuffer,
-                indices: indexBuffer,
-                vertexCount: mesh.vertexCount,
-                indexCount: mesh.indexCount
-            };
-
-            console.log('Mesh data uploaded to WebGL buffers:', {
-                vertices: mesh.vertexCount,
-                indices: mesh.indexCount
-            });
-
-            return buffers;
-        }
-
-        // Generate cone geometry for a start position marker
-        function generateConeMesh(x, y, z, radius, height) {
-            const vertices = [];
-            const indices = [];
-            const segments = 16;
-
-            // Cone tip at top
-            vertices.push(x, y + height, z);
-
-            // Base vertices
-            for (let i = 0; i < segments; i++) {
-                const angle = (i / segments) * Math.PI * 2;
-                const px = x + Math.cos(angle) * radius;
-                const pz = z + Math.sin(angle) * radius;
-                vertices.push(px, y, pz);
-            }
-
-            // Generate triangles
-            for (let i = 0; i < segments; i++) {
-                const next = (i + 1) % segments;
-                indices.push(0, i + 1, next + 1);
-            }
-
-            return {
-                vertices: new Float32Array(vertices),
-                indices: new Uint16Array(indices),
-                vertexCount: vertices.length / 3,
-                indexCount: indices.length
-            };
-        }
-
-        function generateSphereMesh(x, y, z, radius) {
-            const vertices = [];
-            const indices = [];
-            const latSegments = 8;
-            const lonSegments = 16;
-
-            // Generate vertices
-            for (let lat = 0; lat <= latSegments; lat++) {
-                const theta = (lat * Math.PI) / latSegments;
-                const sinTheta = Math.sin(theta);
-                const cosTheta = Math.cos(theta);
-
-                for (let lon = 0; lon <= lonSegments; lon++) {
-                    const phi = (lon * 2 * Math.PI) / lonSegments;
-                    const sinPhi = Math.sin(phi);
-                    const cosPhi = Math.cos(phi);
-
-                    const px = x + radius * sinTheta * cosPhi;
-                    const py = y + radius * cosTheta;
-                    const pz = z + radius * sinTheta * sinPhi;
-
-                    vertices.push(px, py, pz);
-                }
-            }
-
-            // Generate indices
-            for (let lat = 0; lat < latSegments; lat++) {
-                for (let lon = 0; lon < lonSegments; lon++) {
-                    const first = lat * (lonSegments + 1) + lon;
-                    const second = first + lonSegments + 1;
-
-                    indices.push(first, second, first + 1);
-                    indices.push(second, second + 1, first + 1);
-                }
-            }
-
-            return {
-                vertices: new Float32Array(vertices),
-                indices: new Uint16Array(indices),
-                vertexCount: vertices.length / 3,
-                indexCount: indices.length
-            };
-        }
-
-        // Generate marker meshes for start positions (green cones)
-        function generateStartPositionMeshes(startPositions, heightmap, size, waterLevel) {
-            const allVertices = [];
-            const allIndices = [];
-            let totalVertices = 0;
-            let totalIndices = 0;
-
-            const markerRadius = size * 0.01;
-            const markerHeight = size * 0.02;
-
-            startPositions.forEach((pos) => {
-                const height = heightmap[pos.y * size + pos.x];
-                const normalizedHeight = height / 255.0;
-
-                // Convert map coordinates to terrain coordinates
-                const terrainX = (pos.x / (size - 1)) * 2.0 - 1.0;
-                const terrainZ = (pos.y / (size - 1)) * 2.0 - 1.0;
-                const terrainY = normalizedHeight;
-
-                const cone = generateConeMesh(
-                    terrainX,
-                    terrainY,
-                    terrainZ,
-                    markerRadius,
-                    markerHeight
-                );
-
-                const vertexOffset = totalVertices;
-
-                for (let i = 0; i < cone.vertices.length; i++) {
-                    allVertices.push(cone.vertices[i]);
-                }
-
-                for (let i = 0; i < cone.indices.length; i++) {
-                    allIndices.push(cone.indices[i] + vertexOffset);
-                }
-
-                totalVertices += cone.vertexCount;
-                totalIndices += cone.indexCount;
-            });
-
-            return {
-                vertices: new Float32Array(allVertices),
-                indices: new Uint16Array(allIndices),
-                vertexCount: totalVertices,
-                indexCount: totalIndices
-            };
-        }
-
-        // Generate marker meshes for metal spots (yellow spheres)
-        function generateMetalSpotMeshes(metalSpots, heightmap, size, waterLevel) {
-            const allVertices = [];
-            const allIndices = [];
-            let totalVertices = 0;
-            let totalIndices = 0;
-
-            const sphereRadius = size * 0.008;
-
-            metalSpots.forEach((pos) => {
-                const height = heightmap[pos.y * size + pos.x];
-                const normalizedHeight = height / 255.0;
-
-                // Convert map coordinates to terrain coordinates
-                const terrainX = (pos.x / (size - 1)) * 2.0 - 1.0;
-                const terrainZ = (pos.y / (size - 1)) * 2.0 - 1.0;
-                const terrainY = normalizedHeight + sphereRadius;
-
-                const sphere = generateSphereMesh(
-                    terrainX,
-                    terrainY,
-                    terrainZ,
-                    sphereRadius
-                );
-
-                const vertexOffset = totalVertices;
-
-                for (let i = 0; i < sphere.vertices.length; i++) {
-                    allVertices.push(sphere.vertices[i]);
-                }
-
-                for (let i = 0; i < sphere.indices.length; i++) {
-                    allIndices.push(sphere.indices[i] + vertexOffset);
-                }
-
-                totalVertices += sphere.vertexCount;
-                totalIndices += sphere.indexCount;
-            });
-
-            return {
-                vertices: new Float32Array(allVertices),
-                indices: new Uint16Array(allIndices),
-                vertexCount: totalVertices,
-                indexCount: totalIndices
-            };
-        }
-
-        // Generate marker meshes for geothermal spots (red spheres)
-        function generateGeoSpotMeshes(geoSpots, heightmap, size, waterLevel) {
-            const allVertices = [];
-            const allIndices = [];
-            let totalVertices = 0;
-            let totalIndices = 0;
-
-            const sphereRadius = size * 0.008;
-
-            geoSpots.forEach((pos) => {
-                const height = heightmap[pos.y * size + pos.x];
-                const normalizedHeight = height / 255.0;
-
-                // Convert map coordinates to terrain coordinates
-                const terrainX = (pos.x / (size - 1)) * 2.0 - 1.0;
-                const terrainZ = (pos.y / (size - 1)) * 2.0 - 1.0;
-                const terrainY = normalizedHeight + sphereRadius;
-
-                const sphere = generateSphereMesh(
-                    terrainX,
-                    terrainY,
-                    terrainZ,
-                    sphereRadius
-                );
-
-                const vertexOffset = totalVertices;
-
-                for (let i = 0; i < sphere.vertices.length; i++) {
-                    allVertices.push(sphere.vertices[i]);
-                }
-
-                for (let i = 0; i < sphere.indices.length; i++) {
-                    allIndices.push(sphere.indices[i] + vertexOffset);
-                }
-
-                totalVertices += sphere.vertexCount;
-                totalIndices += sphere.indexCount;
-            });
-
-            return {
-                vertices: new Float32Array(allVertices),
-                indices: new Uint16Array(allIndices),
-                vertexCount: totalVertices,
-                indexCount: totalIndices
-            };
-        }
-
-        // Upload marker data to WebGL buffers
-        function uploadMarkerDataToBuffers(mesh) {
-            if (!gl) {
-                console.error('WebGL context not initialized');
-                return null;
-            }
-
-            const positionBuffer = gl.createBuffer();
-            if (!positionBuffer) {
-                console.error('Failed to create marker position buffer');
-                return null;
-            }
-            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices, gl.STATIC_DRAW);
-
-            const indexBuffer = gl.createBuffer();
-            if (!indexBuffer) {
-                console.error('Failed to create marker index buffer');
-                return null;
-            }
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
-
-            const buffers = {
-                position: positionBuffer,
-                indices: indexBuffer,
-                indexCount: mesh.indexCount
-            };
-
-            console.log('Marker data uploaded to WebGL buffers:', {
-                indices: mesh.indexCount
-            });
-
-            return buffers;
-        }
-
-        // Simple Matrix4 math utilities for WebGL
-        const mat4 = {
-            create: function() {
-                return new Float32Array([
-                    1, 0, 0, 0,
-                    0, 1, 0, 0,
-                    0, 0, 1, 0,
-                    0, 0, 0, 1
-                ]);
-            },
-
-            perspective: function(out, fovy, aspect, near, far) {
-                const f = 1.0 / Math.tan(fovy / 2);
-                const nf = 1 / (near - far);
-                out[0] = f / aspect;
-                out[1] = 0;
-                out[2] = 0;
-                out[3] = 0;
-                out[4] = 0;
-                out[5] = f;
-                out[6] = 0;
-                out[7] = 0;
-                out[8] = 0;
-                out[9] = 0;
-                out[10] = (far + near) * nf;
-                out[11] = -1;
-                out[12] = 0;
-                out[13] = 0;
-                out[14] = (2 * far * near) * nf;
-                out[15] = 0;
-                return out;
-            },
-
-            translate: function(out, a, v) {
-                const x = v[0], y = v[1], z = v[2];
-                out[12] = a[0] * x + a[4] * y + a[8] * z + a[12];
-                out[13] = a[1] * x + a[5] * y + a[9] * z + a[13];
-                out[14] = a[2] * x + a[6] * y + a[10] * z + a[14];
-                out[15] = a[3] * x + a[7] * y + a[11] * z + a[15];
-                if (out !== a) {
-                    for (let i = 0; i < 12; i++) {
-                        out[i] = a[i];
-                    }
-                }
-                return out;
-            },
-
-            rotate: function(out, a, rad, axis) {
-                let x = axis[0], y = axis[1], z = axis[2];
-                let len = Math.sqrt(x * x + y * y + z * z);
-                if (len < 0.00001) return null;
-                len = 1 / len;
-                x *= len;
-                y *= len;
-                z *= len;
-                const s = Math.sin(rad);
-                const c = Math.cos(rad);
-                const t = 1 - c;
-                const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
-                const a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
-                const a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
-                const b00 = x * x * t + c;
-                const b01 = y * x * t + z * s;
-                const b02 = z * x * t - y * s;
-                const b10 = x * y * t - z * s;
-                const b11 = y * y * t + c;
-                const b12 = z * y * t + x * s;
-                const b20 = x * z * t + y * s;
-                const b21 = y * z * t - x * s;
-                const b22 = z * z * t + c;
-                out[0] = a00 * b00 + a10 * b01 + a20 * b02;
-                out[1] = a01 * b00 + a11 * b01 + a21 * b02;
-                out[2] = a02 * b00 + a12 * b01 + a22 * b02;
-                out[3] = a03 * b00 + a13 * b01 + a23 * b02;
-                out[4] = a00 * b10 + a10 * b11 + a20 * b12;
-                out[5] = a01 * b10 + a11 * b11 + a21 * b12;
-                out[6] = a02 * b10 + a12 * b11 + a22 * b12;
-                out[7] = a03 * b10 + a13 * b11 + a23 * b12;
-                out[8] = a00 * b20 + a10 * b21 + a20 * b22;
-                out[9] = a01 * b20 + a11 * b21 + a21 * b22;
-                out[10] = a02 * b20 + a12 * b21 + a22 * b22;
-                out[11] = a03 * b20 + a13 * b21 + a23 * b22;
-                return out;
-            },
-
-            identity: function(out) {
-                out[0] = 1; out[1] = 0; out[2] = 0; out[3] = 0;
-                out[4] = 0; out[5] = 1; out[6] = 0; out[7] = 0;
-                out[8] = 0; out[9] = 0; out[10] = 1; out[11] = 0;
-                out[12] = 0; out[13] = 0; out[14] = 0; out[15] = 1;
-                return out;
-            }
-        };
-
-        // Camera state for 3D terrain preview
-        let cameraState = {
-            rotationX: 45,
-            rotationY: 45,
-            zoom: 2.0,
-            panX: 0,
-            panY: 0
-        };
-
-        // Wireframe mode for 3D terrain preview
-        let wireframeMode = false;
-
-        // Mouse drag state for camera rotation and panning
-        let isDragging = false;
-        let isPanning = false;
-        let lastMouseX = 0;
-        let lastMouseY = 0;
-
-        // Initialize camera controls
-        function initCameraControls() {
-            const canvas = document.getElementById('terrain3dCanvas');
-
-            canvas.addEventListener('mousedown', function(e) {
-                isDragging = true;
-                // Check for right-click (button 2) or shift key for panning
-                isPanning = (e.button === 2) || e.shiftKey;
-                lastMouseX = e.clientX;
-                lastMouseY = e.clientY;
-            });
-
-            canvas.addEventListener('mousemove', function(e) {
-                if (!isDragging) return;
-
-                const deltaX = e.clientX - lastMouseX;
-                const deltaY = e.clientY - lastMouseY;
-
-                if (isPanning) {
-                    // Update pan position (sensitivity: 0.5 units per pixel)
-                    const panSpeed = 0.5;
-                    cameraState.panX += deltaX * panSpeed;
-                    cameraState.panY -= deltaY * panSpeed;
-                } else {
-                    // Update rotation angles (sensitivity: 0.5 degrees per pixel)
-                    cameraState.rotationY += deltaX * 0.5;
-                    cameraState.rotationX += deltaY * 0.5;
-
-                    // Clamp vertical rotation to prevent flipping
-                    cameraState.rotationX = Math.max(10, Math.min(90, cameraState.rotationX));
-                }
-
-                lastMouseX = e.clientX;
-                lastMouseY = e.clientY;
-
-                // Request redraw
-                requestAnimationFrame(drawScene);
-            });
-
-            canvas.addEventListener('mouseup', function() {
-                isDragging = false;
-                isPanning = false;
-            });
-
-            canvas.addEventListener('mouseleave', function() {
-                isDragging = false;
-                isPanning = false;
-            });
-
-            // Prevent context menu on right-click
-            canvas.addEventListener('contextmenu', function(e) {
-                e.preventDefault();
-                return false;
-            });
-
-            // Touch support for mobile devices
-            canvas.addEventListener('touchstart', function(e) {
-                if (e.touches.length === 1) {
-                    isDragging = true;
-                    lastMouseX = e.touches[0].clientX;
-                    lastMouseY = e.touches[0].clientY;
-                    e.preventDefault();
-                }
-            });
-
-            canvas.addEventListener('touchmove', function(e) {
-                if (!isDragging || e.touches.length !== 1) return;
-
-                const deltaX = e.touches[0].clientX - lastMouseX;
-                const deltaY = e.touches[0].clientY - lastMouseY;
-
-                cameraState.rotationY += deltaX * 0.5;
-                cameraState.rotationX += deltaY * 0.5;
-                cameraState.rotationX = Math.max(10, Math.min(90, cameraState.rotationX));
-
-                lastMouseX = e.touches[0].clientX;
-                lastMouseY = e.touches[0].clientY;
-
-                requestAnimationFrame(drawScene);
-                e.preventDefault();
-            });
-
-            canvas.addEventListener('touchend', function() {
-                isDragging = false;
-            });
-
-            // Mouse wheel zoom control
-            canvas.addEventListener('wheel', function(e) {
-                e.preventDefault();
-
-                // Zoom sensitivity: adjust zoom based on wheel delta
-                const zoomSpeed = 0.001;
-                cameraState.zoom -= e.deltaY * zoomSpeed;
-
-                // Clamp zoom to reasonable limits (0.5x to 5.0x)
-                cameraState.zoom = Math.max(0.5, Math.min(5.0, cameraState.zoom));
-
-                // Request redraw
-                requestAnimationFrame(drawScene);
-            }, { passive: false });
-        }
-
-        // Reset 3D camera view to default position
-        function resetCameraView() {
-            cameraState.rotationX = 45;
-            cameraState.rotationY = 45;
-            cameraState.zoom = 2.0;
-            cameraState.panX = 0;
-            cameraState.panY = 0;
-            requestAnimationFrame(drawScene);
-        }
-
-        // Toggle wireframe rendering mode
-        function toggleWireframe() {
-            wireframeMode = !wireframeMode;
-            requestAnimationFrame(drawScene);
-        }
-
-        // Zoom in
-        function zoomIn() {
-            cameraState.zoom = Math.max(0.5, cameraState.zoom - 0.2);
-            requestAnimationFrame(drawScene);
-        }
-
-        // Zoom out
-        function zoomOut() {
-            cameraState.zoom = Math.min(5.0, cameraState.zoom + 0.2);
-            requestAnimationFrame(drawScene);
-        }
-
-        // Render the 3D terrain scene
-        function drawScene() {
-            if (!gl || !terrainBuffers) {
-                return;
-            }
-
-            const canvas = gl.canvas;
-            gl.viewport(0, 0, canvas.width, canvas.height);
-
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-            const projectionMatrix = mat4.create();
-            const modelViewMatrix = mat4.create();
-
-            const aspect = canvas.width / canvas.height;
-            mat4.perspective(projectionMatrix, 45 * Math.PI / 180, aspect, 0.1, 1000.0);
-
-            mat4.identity(modelViewMatrix);
-
-            mat4.translate(modelViewMatrix, modelViewMatrix, [cameraState.panX, -cameraState.panY, -mapConfig.size / 64 * cameraState.zoom]);
-
-            mat4.rotate(modelViewMatrix, modelViewMatrix, cameraState.rotationX * Math.PI / 180, [1, 0, 0]);
-            mat4.rotate(modelViewMatrix, modelViewMatrix, cameraState.rotationY * Math.PI / 180, [0, 1, 0]);
-
-            mat4.translate(modelViewMatrix, modelViewMatrix, [-mapConfig.size / 128, 0, -mapConfig.size / 128]);
-
-            gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, projectionMatrix);
-            gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, modelViewMatrix);
-            gl.uniform1f(shaderProgram.waterLevelUniform, mapConfig.waterLevel);
-
-            gl.bindBuffer(gl.ARRAY_BUFFER, terrainBuffers.position);
-            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
-
-            gl.bindBuffer(gl.ARRAY_BUFFER, terrainBuffers.height);
-            gl.vertexAttribPointer(shaderProgram.vertexHeightAttribute, 1, gl.FLOAT, false, 0, 0);
-
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, terrainBuffers.indices);
-
-            // Use UNSIGNED_INT for large meshes (may exceed 65535 vertices)
-            // UNSIGNED_SHORT is insufficient for meshes larger than 256x256
-            // Draw in wireframe mode if enabled
-            if (wireframeMode) {
-                for (let i = 0; i < terrainBuffers.indexCount; i += 3) {
-                    gl.drawElements(gl.LINE_LOOP, 3, gl.UNSIGNED_INT, i * 4);
-                }
-            } else {
-                gl.drawElements(gl.TRIANGLES, terrainBuffers.indexCount, gl.UNSIGNED_INT, 0);
-            }
-
-            // Draw start position markers (green cones)
-            if (startPositionBuffers && markerShaderProgram) {
-                gl.useProgram(markerShaderProgram);
-
-                gl.uniformMatrix4fv(markerShaderProgram.pMatrixUniform, false, projectionMatrix);
-                gl.uniformMatrix4fv(markerShaderProgram.mvMatrixUniform, false, modelViewMatrix);
-
-                // Green color for start positions (matching 2D preview)
-                gl.uniform3f(markerShaderProgram.colorUniform, 0.267, 1.0, 0.267);
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, startPositionBuffers.position);
-                gl.vertexAttribPointer(markerShaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
-
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, startPositionBuffers.indices);
-
-                gl.drawElements(gl.TRIANGLES, startPositionBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
-            }
-
-            // Draw metal spot markers (yellow spheres)
-            if (metalSpotBuffers && markerShaderProgram) {
-                gl.useProgram(markerShaderProgram);
-
-                gl.uniformMatrix4fv(markerShaderProgram.pMatrixUniform, false, projectionMatrix);
-                gl.uniformMatrix4fv(markerShaderProgram.mvMatrixUniform, false, modelViewMatrix);
-
-                // Yellow color for metal spots (matching 2D preview)
-                gl.uniform3f(markerShaderProgram.colorUniform, 1.0, 1.0, 0.0);
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, metalSpotBuffers.position);
-                gl.vertexAttribPointer(markerShaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
-
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, metalSpotBuffers.indices);
-
-                gl.drawElements(gl.TRIANGLES, metalSpotBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
-
-                gl.useProgram(shaderProgram);
-            }
-
-            // Draw geothermal spot markers (red spheres)
-            if (geoSpotBuffers && markerShaderProgram) {
-                gl.useProgram(markerShaderProgram);
-
-                gl.uniformMatrix4fv(markerShaderProgram.pMatrixUniform, false, projectionMatrix);
-                gl.uniformMatrix4fv(markerShaderProgram.mvMatrixUniform, false, modelViewMatrix);
-
-                // Red color for geothermal spots (matching 2D preview)
-                gl.uniform3f(markerShaderProgram.colorUniform, 1.0, 0.0, 0.0);
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, geoSpotBuffers.position);
-                gl.vertexAttribPointer(markerShaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
-
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geoSpotBuffers.indices);
-
-                gl.drawElements(gl.TRIANGLES, geoSpotBuffers.indexCount, gl.UNSIGNED_SHORT, 0);
-
-                gl.useProgram(shaderProgram);
-            }
-        }
-
-        // Render loop for continuous 3D terrain display
-        let renderLoopId = null;
-        function startRenderLoop() {
-            if (renderLoopId !== null) {
-                cancelAnimationFrame(renderLoopId);
-            }
-
-            function render() {
-                drawScene();
-                renderLoopId = requestAnimationFrame(render);
-            }
-
-            render();
-        }
 
         // Update value displays
         function updateValueDisplays() {
@@ -1433,18 +447,21 @@
             document.getElementById('metalStrengthValue').textContent = document.getElementById('metalStrength').value;
             document.getElementById('geoValue').textContent = document.getElementById('geoSpots').value;
         }
-        
+
         // Add event listeners for real-time updates
         document.querySelectorAll('input[type="range"]').forEach(slider => {
             slider.addEventListener('input', updateValueDisplays);
         });
-        
+
         // Initialize displays
         updateValueDisplays();
-        
+
+        // Web Worker for heavy computation
+        let mapWorker = null;
+
         function generateMap() {
-            console.log("=== Generiere Map-Vorschau ===");
-            
+            console.log("=== Generiere Map-Vorschau (Web Worker) ===");
+
             const size = parseInt(document.getElementById('mapSize').value);
             const terrainType = document.getElementById('terrainType').value;
             const playerCount = parseInt(document.getElementById('playerCount').value);
@@ -1455,131 +472,99 @@
             const metalSpots = parseInt(document.getElementById('metalSpots').value);
             const metalStrength = parseFloat(document.getElementById('metalStrength').value);
             const geoSpots = parseInt(document.getElementById('geoSpots').value);
-            
-            // Generate all data
-            heightmapData = generateHeightmap(size, terrainType, noiseStrength, heightVariation, waterLevel, smoothing);
-            textureData = generateTextureMap(size, heightmapData, waterLevel);
 
-            // Auto-retry logic for balanced resource distribution
-            const minFairnessScore = 80;
-            const maxRetries = 10;
-            let balance;
-            let retryCount = 0;
+            // Show loading indicator
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
 
-            console.log(`\n=== RESOURCE GENERATION WITH AUTO-RETRY ===`);
-            console.log(`Target Fairness Score: ${minFairnessScore}%`);
-            console.log(`Maximum Retry Attempts: ${maxRetries}`);
+            // Create progress overlay
+            let progressDiv = document.getElementById('progressOverlay');
+            if (!progressDiv) {
+                progressDiv = document.createElement('div');
+                progressDiv.id = 'progressOverlay';
+                progressDiv.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); padding: 30px 50px; border-radius: 10px; z-index: 1000; color: white; text-align: center; border: 2px solid #ffd700;';
+                document.body.appendChild(progressDiv);
+            }
+            progressDiv.innerHTML = '<h3 style="color: #ffd700; margin: 0 0 10px 0;">🗺️ Generating Map...</h3><p id="progressText" style="margin: 0;">Initializing...</p>';
+            progressDiv.style.display = 'block';
 
-            do {
-                if (retryCount > 0) {
-                    console.log(`\n🔄 Retry attempt ${retryCount}/${maxRetries}...`);
-                }
-
-                // Generate resources using smart distribution algorithms:
-                // - Territory-based balanced metal spot distribution (Voronoi regions)
-                // - Strategic placement near terrain features (hills, ridges, valleys)
-                // - Balanced metal values based on map size and player count
-                // - Strategic geo vent placement (high ground, contested areas)
-                // - Geo vent value variation by strategic importance
-                resourceData = generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount);
-
-                // Calculate resource balance metrics (fairness score, per-player totals, territory analysis)
-                balance = calculateResourceBalance(resourceData, playerCount);
-                retryCount++;
-
-                console.log(`Attempt ${retryCount}: Fairness Score = ${balance.summary.overallFairness}/100`);
-
-                if (parseFloat(balance.summary.overallFairness) >= minFairnessScore) {
-                    console.log(`✅ Target fairness score achieved!`);
-                    break;
-                } else if (retryCount < maxRetries) {
-                    console.log(`⚠️  Fairness score below ${minFairnessScore}%, regenerating...`);
-                }
-            } while (retryCount < maxRetries && parseFloat(balance.summary.overallFairness) < minFairnessScore);
-
-            if (retryCount === maxRetries && parseFloat(balance.summary.overallFairness) < minFairnessScore) {
-                console.log(`⚠️  Warning: Could not achieve target fairness score after ${maxRetries} attempts`);
-                console.log(`Using best attempt: ${balance.summary.overallFairness}/100`);
-            } else {
-                console.log(`✅ Fair distribution achieved in ${retryCount} attempt${retryCount > 1 ? 's' : ''}`);
+            // Terminate old worker if exists
+            if (mapWorker) {
+                mapWorker.terminate();
             }
 
-            // Calculate and log resource balance
-            console.log('\n=== RESOURCE BALANCE ANALYSIS ===');
-            console.log('Per-Player Resource Totals:');
-            balance.perPlayer.forEach(p => {
-                console.log(`  Player ${p.player}: ${p.metalSpotCount} spots, ${p.totalMetalValue.toFixed(1)} total metal (${p.avgMetalPerSpot.toFixed(2)} avg/spot)`);
-            });
-            console.log('\nTerritory Analysis:');
-            balance.territoryAnalysis.forEach(t => {
-                console.log(`  Player ${t.player}: ${t.territorySize.toLocaleString()} pixels (${t.territoryPercent.toFixed(1)}%), Balance: ${t.territoryBalance.toFixed(1)}%`);
-            });
-            console.log('\nFairness Metrics:');
-            console.log(`  Spot Distribution CV: ${balance.summary.spotDistributionCV}%`);
-            console.log(`  Metal Distribution CV: ${balance.summary.metalDistributionCV}%`);
-            console.log(`  Territory Distribution CV: ${balance.summary.territoryDistributionCV}%`);
-            console.log(`  Overall Fairness Score: ${balance.summary.overallFairness}/100`);
-            console.log(`  Total Metal Spots: ${balance.summary.totalMetalSpots}`);
-            console.log(`  Avg Metal per Spot: ${balance.summary.avgMetalPerSpot}`);
-            console.log('================================\n');
+            // Create new worker
+            mapWorker = new Worker('map-worker.js');
 
-            mapConfig = {
-                size: size,
-                terrainType: terrainType,
-                playerCount: playerCount,
-                noiseStrength: noiseStrength,
-                heightVariation: heightVariation,
-                waterLevel: waterLevel,
-                metalSpots: metalSpots,
-                metalStrength: metalStrength,
-                geoSpots: geoSpots,
-                startPositions: generateStartPositions(size, playerCount, heightmapData, waterLevel),
-                metalSpotLocations: resourceData.metalSpots,
-                geoSpotLocations: resourceData.geoSpots
+            mapWorker.onmessage = function (e) {
+                const data = e.data;
+
+                if (data.type === 'progress') {
+                    document.getElementById('progressText').textContent = data.message;
+                    console.log(data.message);
+                } else if (data.type === 'complete') {
+                    // Store data
+                    heightmapData = data.heightmapData;
+                    textureData = data.textureData;
+                    resourceData = data.resourceData;
+
+                    mapConfig = {
+                        size: size,
+                        terrainType: terrainType,
+                        playerCount: playerCount,
+                        noiseStrength: noiseStrength,
+                        heightVariation: heightVariation,
+                        waterLevel: waterLevel,
+                        metalSpots: metalSpots,
+                        metalStrength: metalStrength,
+                        geoSpots: geoSpots,
+                        startPositions: data.startPositions
+                    };
+
+                    console.log("All data generated successfully");
+                    console.log(`Fairness Score: ${data.balance.summary.overallFairness}/100`);
+
+                    // Draw all previews
+                    try {
+                        drawHeightmap(heightmapData, size);
+                        drawTextureMap(textureData, size);
+                        drawResourceMap(resourceData, size, mapConfig.startPositions);
+                        console.log("All maps drawn successfully");
+                    } catch (error) {
+                        console.error("Error drawing maps:", error);
+                        alert("Error drawing maps: " + error.message);
+                    }
+
+                    // Hide progress and re-enable buttons
+                    progressDiv.style.display = 'none';
+                    buttons.forEach(btn => btn.disabled = false);
+                } else if (data.type === 'error') {
+                    console.error("Worker error:", data.message);
+                    alert("Map generation failed: " + data.message);
+                    progressDiv.style.display = 'none';
+                    buttons.forEach(btn => btn.disabled = false);
+                }
             };
-            
-            console.log("All data generated successfully");
 
-            // Draw all previews - NO DOWNLOADS!
-            try {
-                drawHeightmap(heightmapData, size);
-                drawTextureMap(textureData, size);
-                drawResourceMap(resourceData, size, mapConfig.startPositions);
-                console.log("All maps drawn successfully");
-            } catch (error) {
-                console.error("Error drawing maps:", error);
-                alert("Error drawing maps: " + error.message);
-            }
+            mapWorker.onerror = function (error) {
+                console.error("Worker error:", error);
+                alert("Map generation failed: " + error.message);
+                progressDiv.style.display = 'none';
+                buttons.forEach(btn => btn.disabled = false);
+            };
 
-            // Generate and render 3D terrain
-            try {
-                const mesh = generateTerrainMesh(heightmapData, size);
-                terrainBuffers = uploadMeshDataToBuffers(mesh);
-                if (terrainBuffers) {
-                    // Generate and upload start position markers (green cones)
-                    const startPositionMesh = generateStartPositionMeshes(mapConfig.startPositions, heightmapData, size, waterLevel);
-                    startPositionBuffers = uploadMarkerDataToBuffers(startPositionMesh);
-
-                    // Generate and upload metal spot markers (yellow spheres)
-                    const metalSpotMesh = generateMetalSpotMeshes(mapConfig.metalSpotLocations, heightmapData, size, waterLevel);
-                    metalSpotBuffers = uploadMarkerDataToBuffers(metalSpotMesh);
-
-                    // Generate and upload geothermal spot markers (red spheres)
-                    const geoSpotMesh = generateGeoSpotMeshes(mapConfig.geoSpotLocations, heightmapData, size, waterLevel);
-                    geoSpotBuffers = uploadMarkerDataToBuffers(geoSpotMesh);
-
-                    startRenderLoop();
-                    console.log("3D terrain rendering started");
-                }
-            } catch (error) {
-                console.error("Error rendering 3D terrain:", error);
-            }
+            // Send parameters to worker
+            mapWorker.postMessage({
+                size, terrainType, playerCount, noiseStrength,
+                heightVariation, waterLevel, smoothing,
+                metalSpots, metalStrength, geoSpots
+            });
         }
-        
+
         function randomizeSettings() {
             const terrainTypes = ['continental', 'islands', 'canyon', 'hills', 'flat'];
             const playerCounts = [2, 4, 6, 8];
-            
+
             document.getElementById('terrainType').value = terrainTypes[Math.floor(Math.random() * terrainTypes.length)];
             document.getElementById('playerCount').value = playerCounts[Math.floor(Math.random() * playerCounts.length)];
             document.getElementById('noiseStrength').value = (0.2 + Math.random() * 0.8).toFixed(1);
@@ -1589,19 +574,55 @@
             document.getElementById('metalSpots').value = Math.floor(15 + Math.random() * 30);
             document.getElementById('metalStrength').value = (1.5 + Math.random() * 3).toFixed(1);
             document.getElementById('geoSpots').value = Math.floor(3 + Math.random() * 8);
-            
+
             updateValueDisplays();
         }
-        
+
+        function shareToCommunity() {
+            // Check if a map has been generated
+            if (!mapConfig || Object.keys(mapConfig).length === 0) {
+                alert('Please generate a map first before sharing to the community.');
+                return;
+            }
+
+            // Capture the texture canvas as a preview image
+            let previewImageData = null;
+            try {
+                const textureCanvas = document.getElementById('textureCanvas');
+                if (textureCanvas) {
+                    previewImageData = textureCanvas.toDataURL('image/png');
+                }
+            } catch (error) {
+                console.error('Error capturing preview image:', error);
+            }
+
+            // Store map metadata in localStorage for pre-filling the upload form
+            const mapMetadata = {
+                size: mapConfig.size,
+                terrainType: mapConfig.terrainType,
+                playerCount: mapConfig.playerCount,
+                timestamp: Date.now()
+            };
+            localStorage.setItem('pendingMapUpload', JSON.stringify(mapMetadata));
+
+            // Store the preview image data if captured
+            if (previewImageData) {
+                localStorage.setItem('pendingMapPreview', previewImageData);
+            }
+
+            // Open the community portal in a new tab
+            window.open('http://localhost:8000/community', '_blank');
+        }
+
         function generateHeightmap(size, terrainType, noiseStrength, heightVariation, waterLevel, smoothing) {
             const data = new Array(size * size);
-            
+
             // Base terrain generation
             for (let y = 0; y < size; y++) {
                 for (let x = 0; x < size; x++) {
                     const index = y * size + x;
                     let height = 0;
-                    
+
                     switch (terrainType) {
                         case 'continental':
                             height = generateContinentalTerrain(x, y, size, noiseStrength);
@@ -1619,31 +640,31 @@
                             height = generateFlatTerrain(x, y, size, noiseStrength);
                             break;
                     }
-                    
+
                     data[index] = Math.max(0, Math.min(255, height * heightVariation));
                 }
             }
-            
+
             // Apply smoothing
             for (let i = 0; i < smoothing; i++) {
                 smoothHeightmap(data, size);
             }
-            
+
             return data;
         }
-        
+
         function generateContinentalTerrain(x, y, size, noiseStrength) {
             const centerX = size / 2;
             const centerY = size / 2;
             const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
             const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
-            
+
             const baseHeight = 1 - (dist / maxDist) * 0.7;
             const noise = (noise2D(x * 0.01, y * 0.01) + noise2D(x * 0.005, y * 0.005) * 0.5) * noiseStrength;
-            
+
             return Math.max(0, baseHeight + noise);
         }
-        
+
         function generateIslandTerrain(x, y, size, noiseStrength) {
             const islands = [
                 { x: size * 0.3, y: size * 0.3, radius: size * 0.2 },
@@ -1651,7 +672,7 @@
                 { x: size * 0.2, y: size * 0.8, radius: size * 0.15 },
                 { x: size * 0.8, y: size * 0.2, radius: size * 0.15 }
             ];
-            
+
             let height = 0;
             islands.forEach(island => {
                 const dist = Math.sqrt((x - island.x) ** 2 + (y - island.y) ** 2);
@@ -1659,40 +680,40 @@
                     height = Math.max(height, 1 - (dist / island.radius));
                 }
             });
-            
+
             const noise = noise2D(x * 0.01, y * 0.01) * noiseStrength;
             return Math.max(0, height + noise);
         }
-        
+
         function generateCanyonTerrain(x, y, size, noiseStrength) {
             const canyonCenter = size / 2;
             const distFromCenter = Math.abs(y - canyonCenter) / (size / 2);
-            
+
             let height = distFromCenter;
             const noise = noise2D(x * 0.008, y * 0.008) * noiseStrength;
-            
+
             return Math.max(0.1, height + noise);
         }
-        
+
         function generateHillyTerrain(x, y, size, noiseStrength) {
             const noise1 = noise2D(x * 0.008, y * 0.008);
             const noise2 = noise2D(x * 0.015, y * 0.015) * 0.5;
             const noise3 = noise2D(x * 0.03, y * 0.03) * 0.25;
-            
+
             return Math.max(0.2, (noise1 + noise2 + noise3) * noiseStrength + 0.3);
         }
-        
+
         function generateFlatTerrain(x, y, size, noiseStrength) {
             const noise = noise2D(x * 0.02, y * 0.02) * noiseStrength * 0.3;
-            return 0.4 + noise;
+            return 0.6 + noise;
         }
-        
+
         function noise2D(x, y) {
             // Simple 2D noise function
             const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
             return (n - Math.floor(n)) * 2 - 1;
         }
-        
+
         function smoothHeightmap(data, size) {
             const newData = [...data];
             for (let y = 1; y < size - 1; y++) {
@@ -1939,10 +960,11 @@
 
         function generateVoronoiTerritories(startPositions, size) {
             const territories = new Int8Array(size * size);
+            // Use step sampling for large maps to avoid freeze
+            const step = size >= 1024 ? 4 : (size >= 512 ? 2 : 1);
 
-            for (let y = 0; y < size; y++) {
-                for (let x = 0; x < size; x++) {
-                    const index = y * size + x;
+            for (let y = 0; y < size; y += step) {
+                for (let x = 0; x < size; x += step) {
                     let nearestPlayer = 0;
                     let minDistance = Infinity;
 
@@ -1956,7 +978,12 @@
                         }
                     }
 
-                    territories[index] = nearestPlayer;
+                    // Fill the block with the same territory
+                    for (let dy = 0; dy < step && y + dy < size; dy++) {
+                        for (let dx = 0; dx < step && x + dx < size; dx++) {
+                            territories[(y + dy) * size + (x + dx)] = nearestPlayer;
+                        }
+                    }
                 }
             }
 
@@ -1968,11 +995,11 @@
 
         function generateTextureMap(size, heightmapData, waterLevel) {
             const textureData = new Array(size * size * 4); // RGBA
-            
+
             for (let i = 0; i < size * size; i++) {
                 const height = heightmapData[i];
                 const index = i * 4;
-                
+
                 if (height < waterLevel) {
                     // Water - blue
                     textureData[index] = 30;      // R
@@ -1999,13 +1026,13 @@
                     textureData[index + 1] = 240; // G
                     textureData[index + 2] = 255; // B
                 }
-                
+
                 textureData[index + 3] = 255; // Alpha
             }
-            
+
             return textureData;
         }
-        
+
         function calculateStrategicScore(x, y, height, terrainAnalysis, size, waterLevel) {
             let score = 0;
             const hills = terrainAnalysis.hills;
@@ -2215,7 +1242,7 @@
             return finalValue;
         }
 
-        function generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount) {
+        function generateResourceMap(size, heightmapData, waterLevel, metalSpots, geoSpots, playerCount, existingTerrainAnalysis = null) {
             const resourceData = {
                 metalSpots: [],
                 geoSpots: [],
@@ -2225,8 +1252,8 @@
             // Get metal strength parameter for value calculation
             const metalStrength = parseFloat(document.getElementById('metalStrength').value);
 
-            // Analyze terrain for strategic features
-            const terrainAnalysis = analyzeTerrain(heightmapData, size, waterLevel);
+            // Analyze terrain for strategic features (use cached analysis if provided)
+            const terrainAnalysis = existingTerrainAnalysis || analyzeTerrain(heightmapData, size, waterLevel);
             console.log(`Strategic Placement: Found ${terrainAnalysis.hills.length} hills, ${terrainAnalysis.valleys.length} valleys`);
 
             // Generate start positions for territory division
@@ -2250,9 +1277,11 @@
                 const spotsForPlayer = baseSpotsPerPlayer + (player < extraSpots ? 1 : 0);
 
                 // Collect and score valid positions within this player's territory
+                // Sample positions instead of checking every pixel to avoid freeze
                 const scoredPositions = [];
-                for (let y = 0; y < size; y++) {
-                    for (let x = 0; x < size; x++) {
+                const sampleStep = size >= 1024 ? 8 : (size >= 512 ? 4 : 2);
+                for (let y = 0; y < size; y += sampleStep) {
+                    for (let x = 0; x < size; x += sampleStep) {
                         const index = y * size + x;
                         if (territories[index] === player) {
                             const height = heightmapData[index];
@@ -2338,7 +1367,7 @@
                     if (height > waterLevel + 30) {
                         const score = calculateGeoStrategicScore(
                             x, y, height, terrainAnalysis, size, waterLevel,
-                            territories.territories, playerCount
+                            territories, playerCount
                         );
                         candidates.push({ x, y, height, score });
                     }
@@ -2512,12 +1541,12 @@
             const radius = size * 0.35;
             const centerX = size / 2;
             const centerY = size / 2;
-            
+
             for (let i = 0; i < playerCount; i++) {
                 const angle = (i / playerCount) * 2 * Math.PI;
                 let x = Math.floor(centerX + Math.cos(angle) * radius);
                 let y = Math.floor(centerY + Math.sin(angle) * radius);
-                
+
                 // Ensure position is on land
                 let attempts = 0;
                 while (heightmapData[y * size + x] <= waterLevel && attempts < 50) {
@@ -2525,68 +1554,68 @@
                     y = Math.floor(centerY + Math.sin(angle) * (radius + Math.random() * 50 - 25));
                     attempts++;
                 }
-                
+
                 positions.push({ x, y, team: i + 1 });
             }
-            
+
             return positions;
         }
-        
+
         // DRAWING FUNCTIONS - ONLY FOR PREVIEW, NO DOWNLOADS!
         function drawHeightmap(data, size) {
             const canvas = document.getElementById('heightmapCanvas');
             const ctx = canvas.getContext('2d');
             canvas.width = 512;
             canvas.height = 512;
-            
+
             const imageData = ctx.createImageData(512, 512);
             const scale = size / 512;
-            
+
             for (let y = 0; y < 512; y++) {
                 for (let x = 0; x < 512; x++) {
                     const sourceX = Math.floor(x * scale);
                     const sourceY = Math.floor(y * scale);
                     const height = data[sourceY * size + sourceX];
                     const index = (y * 512 + x) * 4;
-                    
+
                     imageData.data[index] = height;     // R
                     imageData.data[index + 1] = height; // G
                     imageData.data[index + 2] = height; // B
                     imageData.data[index + 3] = 255;    // A
                 }
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
             console.log("Heightmap drawn to canvas - NO DOWNLOAD");
         }
-        
+
         function drawTextureMap(data, size) {
             const canvas = document.getElementById('textureCanvas');
             const ctx = canvas.getContext('2d');
             canvas.width = 512;
             canvas.height = 512;
-            
+
             const imageData = ctx.createImageData(512, 512);
             const scale = size / 512;
-            
+
             for (let y = 0; y < 512; y++) {
                 for (let x = 0; x < 512; x++) {
                     const sourceX = Math.floor(x * scale);
                     const sourceY = Math.floor(y * scale);
                     const sourceIndex = (sourceY * size + sourceX) * 4;
                     const index = (y * 512 + x) * 4;
-                    
+
                     imageData.data[index] = data[sourceIndex];         // R
                     imageData.data[index + 1] = data[sourceIndex + 1]; // G
                     imageData.data[index + 2] = data[sourceIndex + 2]; // B
                     imageData.data[index + 3] = 255;                   // A
                 }
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
             console.log("Texture map drawn to canvas - NO DOWNLOAD");
         }
-        
+
         function drawResourceMap(resourceData, size, startPositions) {
             const canvas = document.getElementById('resourceCanvas');
             const ctx = canvas.getContext('2d');
@@ -2600,6 +1629,25 @@
             const scale = 512 / size;
             const playerCount = mapConfig.playerCount;
             const showTerritories = document.getElementById('showTerritories').checked;
+
+            // Draw texture as dimmed background for visual alignment
+            if (textureData) {
+                const imageData = ctx.createImageData(512, 512);
+                for (let y = 0; y < 512; y++) {
+                    for (let x = 0; x < 512; x++) {
+                        const sourceX = Math.floor(x / scale);
+                        const sourceY = Math.floor(y / scale);
+                        const sourceIndex = (sourceY * size + sourceX) * 4;
+                        const pixelIndex = (y * 512 + x) * 4;
+                        // Dimmed version of texture for background
+                        imageData.data[pixelIndex] = Math.floor(textureData[sourceIndex] * 0.5);
+                        imageData.data[pixelIndex + 1] = Math.floor(textureData[sourceIndex + 1] * 0.5);
+                        imageData.data[pixelIndex + 2] = Math.floor(textureData[sourceIndex + 2] * 0.5);
+                        imageData.data[pixelIndex + 3] = 255;
+                    }
+                }
+                ctx.putImageData(imageData, 0, 0);
+            }
 
             // Define player territory colors (semi-transparent)
             const playerColors = [
@@ -2626,8 +1674,8 @@
             ];
 
             // Draw territory boundaries (only if checkbox is checked)
-            if (showTerritories && resourceData.territories && resourceData.territories.territories) {
-                const territories = resourceData.territories.territories;
+            if (showTerritories && resourceData.territories) {
+                const territories = resourceData.territories;
                 const imageData = ctx.createImageData(512, 512);
                 const data = imageData.data;
 
@@ -2784,7 +1832,7 @@
                 ctx.fillStyle = '#ffffff';
                 ctx.font = '11px Arial';
                 ctx.fillText(`${player.totalMetalValue.toFixed(1)} (${player.metalSpotCount} spots)`,
-                           panelX + padding + 35, y);
+                    panelX + padding + 35, y);
                 y += lineHeight;
             });
 
@@ -2792,424 +1840,9 @@
             ctx.fillStyle = '#aaaaaa';
             ctx.font = '11px Arial';
             ctx.fillText(`Total Metal Spots: ${balance.summary.totalMetalSpots}`,
-                       panelX + padding, panelY + 130);
+                panelX + padding, panelY + 130);
 
             console.log("Resource map drawn to canvas - NO DOWNLOAD");
-        }
-
-        // CONFIGURATION EXPORT/IMPORT FUNCTIONS
-        function exportConfigJSON() {
-            if (!mapConfig || Object.keys(mapConfig).length === 0) {
-                alert('Please generate a map first!');
-                return;
-            }
-
-            // Collect metadata from form fields
-            const creatorName = document.getElementById('creatorName').value.trim() || 'Anonymous';
-            const mapDescription = document.getElementById('mapDescription').value.trim() || 'No description';
-
-            // Create export object with all configuration and metadata
-            const exportData = {
-                version: '1.0',
-                timestamp: new Date().toISOString(),
-                metadata: {
-                    creator: creatorName,
-                    description: mapDescription
-                },
-                config: { ...mapConfig }
-            };
-
-            // Convert to JSON string with pretty formatting
-            const jsonString = JSON.stringify(exportData, null, 2);
-
-            // Create blob and download
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `map_config_${mapConfig.terrainType}_${mapConfig.size}x${mapConfig.size}_${Date.now()}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        function exportConfigText() {
-            if (!mapConfig || Object.keys(mapConfig).length === 0) {
-                alert('Please generate a map first!');
-                return;
-            }
-
-            try {
-                // Collect metadata from form fields
-                const creatorName = document.getElementById('creatorName').value.trim() || 'Anonymous';
-                const mapDescription = document.getElementById('mapDescription').value.trim() || 'No description';
-
-                // Create export object with all configuration and metadata
-                const exportData = {
-                    version: '1.0',
-                    timestamp: new Date().toISOString(),
-                    metadata: {
-                        creator: creatorName,
-                        description: mapDescription
-                    },
-                    config: { ...mapConfig }
-                };
-
-                // Convert to JSON string (compact for sharing)
-                const jsonString = JSON.stringify(exportData);
-
-                // Encode as base64 for easy copy-paste sharing
-                const base64String = btoa(jsonString);
-
-                // Copy to clipboard
-                navigator.clipboard.writeText(base64String).then(() => {
-                    alert('Configuration copied to clipboard!\n\nYou can now paste this config string to share with others.');
-                }).catch(err => {
-                    // Fallback for older browsers or when clipboard API fails
-                    const textArea = document.createElement('textarea');
-                    textArea.value = base64String;
-                    textArea.style.position = 'fixed';
-                    textArea.style.left = '-999999px';
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    try {
-                        document.execCommand('copy');
-                        alert('Configuration copied to clipboard!\n\nYou can now paste this config string to share with others.');
-                    } catch (err) {
-                        alert('Failed to copy to clipboard. Please check browser permissions.');
-                    }
-                    document.body.removeChild(textArea);
-                });
-            } catch (error) {
-                alert('Error exporting configuration: ' + error.message);
-            }
-        }
-
-        // Validation function for configuration values
-        function validateConfigurationValues(config) {
-            // Valid map sizes
-            const validMapSizes = ['512', '1024', '2048'];
-            const validTerrainTypes = ['continental', 'islands', 'canyon', 'hills', 'flat'];
-            const validPlayerCounts = ['2', '4', '6', '8'];
-
-            // Validate mapSize
-            if (config.size !== undefined) {
-                if (typeof config.size !== 'string' && typeof config.size !== 'number') {
-                    throw new Error('Invalid configuration: map size must be a string or number.');
-                }
-                const sizeStr = String(config.size);
-                if (!validMapSizes.includes(sizeStr)) {
-                    throw new Error('Invalid configuration: map size must be 512, 1024, or 2048. Got: ' + sizeStr);
-                }
-            }
-
-            // Validate terrainType
-            if (config.terrainType !== undefined) {
-                if (typeof config.terrainType !== 'string') {
-                    throw new Error('Invalid configuration: terrain type must be a string.');
-                }
-                if (!validTerrainTypes.includes(config.terrainType)) {
-                    throw new Error('Invalid configuration: terrain type must be one of: ' + validTerrainTypes.join(', ') + '. Got: ' + config.terrainType);
-                }
-            }
-
-            // Validate playerCount
-            if (config.playerCount !== undefined) {
-                if (typeof config.playerCount !== 'string' && typeof config.playerCount !== 'number') {
-                    throw new Error('Invalid configuration: player count must be a string or number.');
-                }
-                const playerStr = String(config.playerCount);
-                if (!validPlayerCounts.includes(playerStr)) {
-                    throw new Error('Invalid configuration: player count must be 2, 4, 6, or 8. Got: ' + playerStr);
-                }
-            }
-
-            // Validate numeric ranges
-            const numericFields = [
-                { name: 'noiseStrength', min: 0, max: 1 },
-                { name: 'heightVariation', min: 0, max: 1 },
-                { name: 'waterLevel', min: 0, max: 1 },
-                { name: 'metalSpots', min: 0, max: 100 },
-                { name: 'metalStrength', min: 0, max: 1 },
-                { name: 'geoSpots', min: 0, max: 50 }
-            ];
-
-            for (const field of numericFields) {
-                if (config[field.name] !== undefined) {
-                    const value = Number(config[field.name]);
-                    if (isNaN(value)) {
-                        throw new Error('Invalid configuration: ' + field.name + ' must be a valid number. Got: ' + config[field.name]);
-                    }
-                    if (value < field.min || value > field.max) {
-                        throw new Error('Invalid configuration: ' + field.name + ' must be between ' + field.min + ' and ' + field.max + '. Got: ' + value);
-                    }
-                }
-            }
-        }
-
-        function importConfigFromFile() {
-            const fileInput = document.getElementById('configFileInput');
-            const file = fileInput.files[0];
-            importConfigFromJSON(file);
-
-            // Clear the file input after import
-            fileInput.value = '';
-        }
-
-        function importConfigFromJSON(file) {
-            if (!file) {
-                alert('Please select a JSON file to import!');
-                return;
-            }
-
-            const reader = new FileReader();
-
-            reader.onload = function(e) {
-                try {
-                    const jsonContent = e.target.result;
-
-                    // Check if file is empty
-                    if (!jsonContent || jsonContent.trim() === '') {
-                        throw new Error('The file is empty. Please select a valid configuration file.');
-                    }
-
-                    // Try to parse JSON
-                    let importData;
-                    try {
-                        importData = JSON.parse(jsonContent);
-                    } catch (parseError) {
-                        if (parseError instanceof SyntaxError) {
-                            throw new Error('The file is not valid JSON.\n\nDetails: ' + parseError.message);
-                        }
-                        throw parseError;
-                    }
-
-                    // Validate structure
-                    if (!importData || typeof importData !== 'object') {
-                        throw new Error('Invalid configuration file format. The content must be a valid JSON object.');
-                    }
-
-                    if (!importData.version || !importData.config) {
-                        throw new Error('Invalid configuration file format. Missing required fields (version or config).');
-                    }
-
-                    // Validate version is a string
-                    if (typeof importData.version !== 'string') {
-                        throw new Error('Invalid configuration file format. Version must be a string.');
-                    }
-
-                    // Check version compatibility
-                    if (importData.version !== '1.0') {
-                        alert('Warning: This configuration was created with a different version (v' + importData.version + '). Some settings may not work correctly.');
-                    }
-
-                    // Validate config is an object
-                    if (typeof importData.config !== 'object' || importData.config === null) {
-                        throw new Error('Invalid configuration file format. Config must be a valid object.');
-                    }
-
-                    const config = importData.config;
-
-                    // Validate configuration values
-                    validateConfigurationValues(config);
-
-                    // Apply all configuration values to form elements
-                    if (config.size !== undefined) {
-                        document.getElementById('mapSize').value = config.size;
-                    }
-                    if (config.terrainType !== undefined) {
-                        document.getElementById('terrainType').value = config.terrainType;
-                    }
-                    if (config.playerCount !== undefined) {
-                        document.getElementById('playerCount').value = config.playerCount;
-                    }
-                    if (config.noiseStrength !== undefined) {
-                        document.getElementById('noiseStrength').value = config.noiseStrength;
-                    }
-                    if (config.heightVariation !== undefined) {
-                        document.getElementById('heightVariation').value = config.heightVariation;
-                    }
-                    if (config.waterLevel !== undefined) {
-                        document.getElementById('waterLevel').value = config.waterLevel;
-                    }
-                    if (config.metalSpots !== undefined) {
-                        document.getElementById('metalSpots').value = config.metalSpots;
-                    }
-                    if (config.metalStrength !== undefined) {
-                        document.getElementById('metalStrength').value = config.metalStrength;
-                    }
-                    if (config.geoSpots !== undefined) {
-                        document.getElementById('geoSpots').value = config.geoSpots;
-                    }
-
-                    // Apply metadata
-                    if (importData.metadata) {
-                        if (importData.metadata.creator) {
-                            document.getElementById('creatorName').value = importData.metadata.creator;
-                        }
-                        if (importData.metadata.description) {
-                            document.getElementById('mapDescription').value = importData.metadata.description;
-                        }
-                    }
-
-                    // Update value displays
-                    updateValueDisplays();
-
-                    // Update mapConfig object
-                    mapConfig = { ...config };
-
-                    // Show success message with details
-                    const timestamp = importData.timestamp ? new Date(importData.timestamp).toLocaleString() : 'Unknown';
-                    alert('Configuration imported successfully!\n\n' +
-                          'Creator: ' + (importData.metadata?.creator || 'Anonymous') + '\n' +
-                          'Description: ' + (importData.metadata?.description || 'No description') + '\n' +
-                          'Exported: ' + timestamp + '\n\n' +
-                          'Click "Generate Map" to generate the map with these settings.');
-
-                } catch (error) {
-                    // Errors are already well-formatted in the try block, just display them
-                    alert('Error importing configuration: ' + error.message);
-                }
-            };
-
-            reader.onerror = function() {
-                alert('Error reading file: Please try again with a different file.');
-            };
-
-            // Read the file as text
-            reader.readAsText(file);
-        }
-
-        function importConfigFromText() {
-            const textArea = document.getElementById('configTextInput');
-            const base64String = textArea.value.trim();
-
-            if (!base64String) {
-                alert('Please paste a configuration string into the text area first!');
-                return;
-            }
-
-            try {
-                // Check if the string might be empty
-                if (base64String.length === 0) {
-                    throw new Error('The configuration string is empty.');
-                }
-
-                // Decode base64 string
-                let jsonString;
-                try {
-                    jsonString = atob(base64String);
-                } catch (decodeError) {
-                    if (decodeError.name === 'InvalidCharacterError') {
-                        throw new Error('The configuration string contains invalid characters.\n\nThis usually means:\n- The string was not copied completely\n- Extra spaces or line breaks were added\n- It\'s not a valid base64-encoded string');
-                    }
-                    throw decodeError;
-                }
-
-                // Check if decoded JSON is empty
-                if (!jsonString || jsonString.trim() === '') {
-                    throw new Error('The decoded configuration is empty. The configuration string may be corrupted.');
-                }
-
-                // Parse JSON
-                let importData;
-                try {
-                    importData = JSON.parse(jsonString);
-                } catch (parseError) {
-                    if (parseError instanceof SyntaxError) {
-                        throw new Error('The configuration string is not valid JSON after decoding.\n\nDetails: ' + parseError.message + '\n\nPlease make sure you copied the complete configuration string.');
-                    }
-                    throw parseError;
-                }
-
-                // Validate structure
-                if (!importData || typeof importData !== 'object') {
-                    throw new Error('Invalid configuration format. The content must be a valid JSON object.');
-                }
-
-                if (!importData.version || !importData.config) {
-                    throw new Error('Invalid configuration format. Missing required fields (version or config).');
-                }
-
-                // Validate version is a string
-                if (typeof importData.version !== 'string') {
-                    throw new Error('Invalid configuration format. Version must be a string.');
-                }
-
-                // Check version compatibility
-                if (importData.version !== '1.0') {
-                    alert('Warning: This configuration was created with a different version (v' + importData.version + '). Some settings may not work correctly.');
-                }
-
-                // Validate config is an object
-                if (typeof importData.config !== 'object' || importData.config === null) {
-                    throw new Error('Invalid configuration format. Config must be a valid object.');
-                }
-
-                const config = importData.config;
-
-                // Validate configuration values
-                validateConfigurationValues(config);
-
-                // Apply all configuration values to form elements
-                if (config.size !== undefined) {
-                    document.getElementById('mapSize').value = config.size;
-                }
-                if (config.terrainType !== undefined) {
-                    document.getElementById('terrainType').value = config.terrainType;
-                }
-                if (config.playerCount !== undefined) {
-                    document.getElementById('playerCount').value = config.playerCount;
-                }
-                if (config.noiseStrength !== undefined) {
-                    document.getElementById('noiseStrength').value = config.noiseStrength;
-                }
-                if (config.heightVariation !== undefined) {
-                    document.getElementById('heightVariation').value = config.heightVariation;
-                }
-                if (config.waterLevel !== undefined) {
-                    document.getElementById('waterLevel').value = config.waterLevel;
-                }
-                if (config.metalSpots !== undefined) {
-                    document.getElementById('metalSpots').value = config.metalSpots;
-                }
-                if (config.metalStrength !== undefined) {
-                    document.getElementById('metalStrength').value = config.metalStrength;
-                }
-                if (config.geoSpots !== undefined) {
-                    document.getElementById('geoSpots').value = config.geoSpots;
-                }
-
-                // Apply metadata
-                if (importData.metadata) {
-                    if (importData.metadata.creator) {
-                        document.getElementById('creatorName').value = importData.metadata.creator;
-                    }
-                    if (importData.metadata.description) {
-                        document.getElementById('mapDescription').value = importData.metadata.description;
-                    }
-                }
-
-                // Update value displays
-                updateValueDisplays();
-
-                // Update mapConfig object
-                mapConfig = { ...config };
-
-                // Show success message with details
-                const timestamp = importData.timestamp ? new Date(importData.timestamp).toLocaleString() : 'Unknown';
-                alert('Configuration imported successfully!\n\n' +
-                      'Creator: ' + (importData.metadata?.creator || 'Anonymous') + '\n' +
-                      'Description: ' + (importData.metadata?.description || 'No description') + '\n' +
-                      'Exported: ' + timestamp + '\n\n' +
-                      'Click "Generate Map" to generate the map with these settings.');
-
-                // Clear the textarea after successful import
-                textArea.value = '';
-
-            } catch (error) {
-                // Errors are already well-formatted in the try block, just display them
-                alert('Error importing configuration: ' + error.message);
-            }
         }
 
         // COMPLETE BAR MAP PACKAGE GENERATION
@@ -3218,10 +1851,10 @@
                 alert('Please generate a map first!');
                 return;
             }
-            
+
             const mapName = `generated_${mapConfig.terrainType}_${mapConfig.size}x${mapConfig.size}`;
             console.log("Generating complete BAR map package:", mapName);
-            
+
             try {
                 // Generate all BAR assets
                 const barAssets = generateBARAssets();
@@ -3239,10 +1872,10 @@
 
                 // Generate build scripts
                 const buildScripts = generateBuildScripts(mapName);
-                
+
                 // Create ZIP file with complete self-compiling package
                 const zipBlob = await createCompleteMapPackage(barAssets, buildScripts, mapName);
-                
+
                 // Download
                 const url = URL.createObjectURL(zipBlob);
                 const a = document.createElement('a');
@@ -3250,21 +1883,21 @@
                 a.download = `${mapName}_complete_package.zip`;
                 a.click();
                 URL.revokeObjectURL(url);
-                
+
                 console.log("Complete BAR map package generated successfully!");
             } catch (error) {
                 console.error("Error generating BAR map package:", error);
                 alert("Error generating BAR map package: " + error.message);
             }
         }
-        
+
         function generateBuildScripts(mapName) {
             const pythonScript = generatePythonBuildScript(mapName);
             const batchScript = generateBatchScript(mapName);
             const bashScript = generateBashScript(mapName);
             const requirements = generateRequirements();
             const readme = generateDetailedReadme(mapName);
-            
+
             return {
                 python: pythonScript,
                 batch: batchScript,
@@ -3273,7 +1906,7 @@
                 readme: readme
             };
         }
-        
+
         function generatePythonBuildScript(mapName) {
             return `#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -4150,7 +2783,7 @@ if __name__ == "__main__":
         sys.exit(1)
 `;
         }
-        
+
         function generateBatchScript(mapName) {
             return `@echo off
 REM BAR Map Builder - Windows Batch Script
@@ -4188,7 +2821,7 @@ echo Drücke eine Taste zum Beenden...
 pause >nul
 `;
         }
-        
+
         function generateBashScript(mapName) {
             return `#!/bin/bash
 # BAR Map Builder - Linux/macOS Bash Script  
@@ -4227,7 +2860,7 @@ echo "✨ Fertig! Drücke Enter zum Beenden..."
 read
 `;
         }
-        
+
         function generateRequirements() {
             return `# BAR Map Builder - Python Requirements
 # Generiert von BAR Map Generator v1.0
@@ -4246,7 +2879,7 @@ read
 # requests>=2.25.0  # für bessere HTTP-Requests
 `;
         }
-        
+
         function generateDetailedReadme(mapName) {
             return `# BAR Map Builder - ${mapName}
 
@@ -4323,7 +2956,7 @@ Die fertige Map wird automatisch installiert in:
 ## 🎮 Map Details
 
 - **Name**: ${mapName}
-- **Größe**: ${mapConfig.size}x${mapConfig.size} (${mapConfig.size/64}x${mapConfig.size/64} Spring-Einheiten)
+- **Größe**: ${mapConfig.size}x${mapConfig.size} (${mapConfig.size / 64}x${mapConfig.size / 64} Spring-Einheiten)
 - **Terrain**: ${mapConfig.terrainType}
 - **Spieler**: ${mapConfig.playerCount}
 - **Metal-Spots**: ${mapConfig.metalSpots}
@@ -4367,11 +3000,11 @@ Falls du Probleme hast:
 - **SD7**: Spring-ZIP-Archive mit allen Map-Dateien
 
 ### Asset-Auflösungen
-- Heightmap: ${64 * (mapConfig.size/64) + 1}x${64 * (mapConfig.size/64) + 1} Pixel (1025x1025)
-- Metalmap: ${32 * (mapConfig.size/64)}x${32 * (mapConfig.size/64)} Pixel (512x512)
-- Grassmap: ${16 * (mapConfig.size/64)}x${16 * (mapConfig.size/64)} Pixel (256x256)
-- Typemap: ${32 * (mapConfig.size/64)}x${32 * (mapConfig.size/64)} Pixel (512x512)
-- Texture: ${512 * (mapConfig.size/64)}x${512 * (mapConfig.size/64)} Pixel (8192x8192)
+- Heightmap: ${64 * (mapConfig.size / 64) + 1}x${64 * (mapConfig.size / 64) + 1} Pixel (1025x1025)
+- Metalmap: ${32 * (mapConfig.size / 64)}x${32 * (mapConfig.size / 64)} Pixel (512x512)
+- Grassmap: ${16 * (mapConfig.size / 64)}x${16 * (mapConfig.size / 64)} Pixel (256x256)
+- Typemap: ${32 * (mapConfig.size / 64)}x${32 * (mapConfig.size / 64)} Pixel (512x512)
+- Texture: ${512 * (mapConfig.size / 64)}x${512 * (mapConfig.size / 64)} Pixel (8192x8192)
 - Minimap: 1024x1024 Pixel
 
 ## 🎉 Viel Spaß mit deiner Map!
@@ -4383,13 +3016,13 @@ https://github.com/beyond-all-reason/bar-map-generator
 *Dieses Paket wurde automatisch generiert am ${new Date().toLocaleDateString('de-DE')} um ${new Date().toLocaleTimeString('de-DE')}*
 `;
         }
-        
+
         function generateBARAssets() {
             const size = mapConfig.size;
             const mapUnits = size / 64; // BAR map units (e.g., 1024 = 16 units)
-            
+
             console.log("Generating BAR assets for size:", size, "units:", mapUnits);
-            
+
             return {
                 // Core maps with correct BAR dimensions
                 heightmap: generateBARHeightmap(),     // 16-bit PNG: (64 * mapUnits + 1)²
@@ -4401,11 +3034,11 @@ https://github.com/beyond-all-reason/bar-map-generator
                 grassmap: generateBARGrassmap(),       // 8-bit BMP: (16 * mapUnits)²
                 typemap: generateBARTypemap(),         // 8-bit BMP: (16 * mapUnits)²
                 splatmap: generateBARSplatmap(),       // RGBA PNG: 2048x(2048*aspect)
-                
+
                 // Configuration
                 mapinfo: generateBARMapInfo(),
                 maphelper: generateBARMapHelper(),
-                
+
                 // Asset lists for folders
                 features: [],
                 mapconfig: {},
@@ -5079,17 +3712,17 @@ https://github.com/beyond-all-reason/bar-map-generator
             canvas.width = heightmapSize;
             canvas.height = heightmapSize;
             const ctx = canvas.getContext('2d');
-            
+
             const imageData = ctx.createImageData(heightmapSize, heightmapSize);
             const scale = size / heightmapSize;
-            
+
             for (let y = 0; y < heightmapSize; y++) {
                 for (let x = 0; x < heightmapSize; x++) {
                     const sourceX = Math.floor(x * scale);
                     const sourceY = Math.floor(y * scale);
                     const height = heightmapData[sourceY * size + sourceX];
                     const index = (y * heightmapSize + x) * 4;
-                    
+
                     // For BMP format, use simple 8-bit grayscale (PyMapConv can handle this)
                     imageData.data[index] = height;       // R - height value
                     imageData.data[index + 1] = height;   // G - height value (grayscale)
@@ -5097,112 +3730,112 @@ https://github.com/beyond-all-reason/bar-map-generator
                     imageData.data[index + 3] = 255;      // A - full alpha
                 }
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
             return canvas;
         }
-        
+
         function generateBARMetalmap() {
             const size = mapConfig.size;
             const mapUnits = size / 64;
             // PyMapConv expects 32 * mapUnits for metalmap (512x512 for 16x16 map)
             const metalmapSize = 32 * mapUnits; // Corrected size: 512x512 for 1024x1024 map
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = metalmapSize;
             canvas.height = metalmapSize;
             const ctx = canvas.getContext('2d');
-            
+
             // Clear to black (no metal)
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, metalmapSize, metalmapSize);
-            
+
             // Draw metal spots as pure red pixels
             const scale = metalmapSize / size;
             ctx.fillStyle = '#FF0000'; // Full red = max metal
-            
+
             resourceData.metalSpots.forEach(spot => {
                 const x = Math.floor(spot.x * scale);
                 const y = Math.floor(spot.y * scale);
                 const metalRadius = 2; // 4px diameter as per BAR documentation
-                
+
                 ctx.beginPath();
                 ctx.arc(x, y, metalRadius, 0, 2 * Math.PI);
                 ctx.fill();
             });
-            
+
             return canvas;
         }
-        
+
         function generateBARTexture() {
             const size = mapConfig.size;
             const mapUnits = size / 64;
             const textureSize = 512 * mapUnits;
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = textureSize;
             canvas.height = textureSize;
             const ctx = canvas.getContext('2d');
-            
+
             const imageData = ctx.createImageData(textureSize, textureSize);
             const scale = size / textureSize;
-            
+
             for (let y = 0; y < textureSize; y++) {
                 for (let x = 0; x < textureSize; x++) {
                     const sourceX = Math.floor(x * scale);
                     const sourceY = Math.floor(y * scale);
                     const sourceIndex = (sourceY * size + sourceX) * 4;
                     const index = (y * textureSize + x) * 4;
-                    
+
                     imageData.data[index] = textureData[sourceIndex];         // R
                     imageData.data[index + 1] = textureData[sourceIndex + 1]; // G
                     imageData.data[index + 2] = textureData[sourceIndex + 2]; // B
                     imageData.data[index + 3] = 255;                          // A - solid, no transparency
                 }
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
             return canvas;
         }
-        
+
         function generateBARNormalmap() {
             const size = mapConfig.size;
             const mapUnits = size / 64;
             const normalmapSize = 512 * mapUnits;
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = normalmapSize;
             canvas.height = normalmapSize;
             const ctx = canvas.getContext('2d');
-            
+
             const imageData = ctx.createImageData(normalmapSize, normalmapSize);
-            
+
             // Generate simple normalmap from heightmap
             for (let y = 0; y < normalmapSize; y++) {
                 for (let x = 0; x < normalmapSize; x++) {
                     const heightScale = size / normalmapSize;
                     const hx = Math.floor(x * heightScale);
                     const hy = Math.floor(y * heightScale);
-                    
+
                     // Sample neighboring heights for normal calculation
                     const h0 = getHeightAt(hx, hy);
                     const h1 = getHeightAt(hx + 1, hy);
                     const h2 = getHeightAt(hx, hy + 1);
-                    
+
                     // Calculate normal
                     const dx = (h1 - h0) / 255;
                     const dy = (h2 - h0) / 255;
-                    
+
                     const nx = -dx;
                     const ny = -dy;
                     const nz = 1;
-                    
+
                     // Normalize
                     const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
                     const normalX = (nx / length + 1) * 127.5;
                     const normalY = (ny / length + 1) * 127.5;
                     const normalZ = (nz / length + 1) * 127.5;
-                    
+
                     const index = (y * normalmapSize + x) * 4;
                     imageData.data[index] = normalX;     // R
                     imageData.data[index + 1] = normalY; // G
@@ -5210,38 +3843,38 @@ https://github.com/beyond-all-reason/bar-map-generator
                     imageData.data[index + 3] = 255;     // A
                 }
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
             return canvas;
         }
-        
+
         function getHeightAt(x, y) {
             const size = mapConfig.size;
             x = Math.max(0, Math.min(size - 1, x));
             y = Math.max(0, Math.min(size - 1, y));
             return heightmapData[y * size + x];
         }
-        
+
         function generateBARSpecularmap() {
             const size = mapConfig.size;
             const mapUnits = size / 64;
             const specularSize = 256 * mapUnits; // Half resolution
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = specularSize;
             canvas.height = specularSize;
             const ctx = canvas.getContext('2d');
-            
+
             const imageData = ctx.createImageData(specularSize, specularSize);
             const scale = size / specularSize;
-            
+
             for (let y = 0; y < specularSize; y++) {
                 for (let x = 0; x < specularSize; x++) {
                     const sourceX = Math.floor(x * scale);
                     const sourceY = Math.floor(y * scale);
                     const height = heightmapData[sourceY * size + sourceX];
                     const index = (y * specularSize + x) * 4;
-                    
+
                     // Generate specular based on height and material type
                     let specular = 64; // Base specular
                     if (height < mapConfig.waterLevel) {
@@ -5249,104 +3882,104 @@ https://github.com/beyond-all-reason/bar-map-generator
                     } else if (height > mapConfig.waterLevel + 100) {
                         specular = 128; // Rock is somewhat reflective
                     }
-                    
+
                     imageData.data[index] = specular;     // R
                     imageData.data[index + 1] = specular; // G
                     imageData.data[index + 2] = specular; // B
                     imageData.data[index + 3] = 255;      // A
                 }
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
             return canvas;
         }
-        
+
         function generateBARMinimap() {
             const canvas = document.createElement('canvas');
             canvas.width = 1024;
             canvas.height = 1024;
             const ctx = canvas.getContext('2d');
-            
+
             const imageData = ctx.createImageData(1024, 1024);
             const scale = mapConfig.size / 1024;
-            
+
             for (let y = 0; y < 1024; y++) {
                 for (let x = 0; x < 1024; x++) {
                     const sourceX = Math.floor(x * scale);
                     const sourceY = Math.floor(y * scale);
                     const sourceIndex = (sourceY * mapConfig.size + sourceX) * 4;
                     const index = (y * 1024 + x) * 4;
-                    
+
                     imageData.data[index] = textureData[sourceIndex];         // R
                     imageData.data[index + 1] = textureData[sourceIndex + 1]; // G
                     imageData.data[index + 2] = textureData[sourceIndex + 2]; // B
                     imageData.data[index + 3] = 255;                          // A
                 }
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
             return canvas;
         }
-        
+
         function generateBARGrassmap() {
             const size = mapConfig.size;
             const mapUnits = size / 64;
             // PyMapConv expects 16 * mapUnits for grassmap (256x256 for 16x16 map)
             const grassSize = 16 * mapUnits; // Corrected size: 256x256 for 1024x1024 map
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = grassSize;
             canvas.height = grassSize;
             const ctx = canvas.getContext('2d');
-            
+
             const imageData = ctx.createImageData(grassSize, grassSize);
             const scale = size / grassSize;
-            
+
             for (let y = 0; y < grassSize; y++) {
                 for (let x = 0; x < grassSize; x++) {
                     const sourceX = Math.floor(x * scale);
                     const sourceY = Math.floor(y * scale);
                     const height = heightmapData[sourceY * size + sourceX];
                     const index = (y * grassSize + x) * 4;
-                    
+
                     // Grass density based on height (grass grows on land, not water)
                     let grassDensity = 0;
                     if (height > mapConfig.waterLevel + 5 && height < mapConfig.waterLevel + 100) {
                         grassDensity = 128 + Math.random() * 127; // Medium to high grass on suitable terrain
                     }
-                    
+
                     imageData.data[index] = grassDensity;     // R
                     imageData.data[index + 1] = grassDensity; // G
                     imageData.data[index + 2] = grassDensity; // B
                     imageData.data[index + 3] = 255;          // A (will be removed in BMP conversion)
                 }
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
             return canvas;
         }
-        
+
         function generateBARTypemap() {
             const size = mapConfig.size;
             const mapUnits = size / 64;
             // PyMapConv expects 32 * mapUnits for typemap (512x512 for 16x16 map)  
             const typeSize = 32 * mapUnits; // Corrected size: 512x512 for 1024x1024 map
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = typeSize;
             canvas.height = typeSize;
             const ctx = canvas.getContext('2d');
-            
+
             const imageData = ctx.createImageData(typeSize, typeSize);
             const scale = size / typeSize;
-            
+
             for (let y = 0; y < typeSize; y++) {
                 for (let x = 0; x < typeSize; x++) {
                     const sourceX = Math.floor(x * scale);
                     const sourceY = Math.floor(y * scale);
                     const height = heightmapData[sourceY * size + sourceX];
                     const index = (y * typeSize + x) * 4;
-                    
+
                     // Type based on height (0=water, 85=land, 170=rock, 255=snow)
                     let type = 0; // Water
                     if (height > mapConfig.waterLevel) {
@@ -5358,34 +3991,34 @@ https://github.com/beyond-all-reason/bar-map-generator
                             type = 255; // Snow/peaks
                         }
                     }
-                    
+
                     imageData.data[index] = type;     // R
                     imageData.data[index + 1] = type; // G
                     imageData.data[index + 2] = type; // B
                     imageData.data[index + 3] = 255;  // A
                 }
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
             return canvas;
         }
-        
+
         function generateBARSplatmap() {
             const size = Math.max(2048, mapConfig.size / 2); // At least 2048px as per documentation
             const aspectRatio = 1; // Square map
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = size;
             canvas.height = size * aspectRatio;
             const ctx = canvas.getContext('2d');
-            
+
             // Simple splatmap - can be expanded for more detail textures
             const imageData = ctx.createImageData(canvas.width, canvas.height);
-            
+
             for (let y = 0; y < canvas.height; y++) {
                 for (let x = 0; x < canvas.width; x++) {
                     const index = (y * canvas.width + x) * 4;
-                    
+
                     // RGBA channels for 4 different detail textures
                     imageData.data[index] = 255;     // R - Channel 1: Base terrain
                     imageData.data[index + 1] = 0;   // G - Channel 2: Rock/cliffs
@@ -5393,18 +4026,18 @@ https://github.com/beyond-all-reason/bar-map-generator
                     imageData.data[index + 3] = 0;   // A - Channel 4: Snow/ice
                 }
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
             return canvas;
         }
-        
+
         // INDIVIDUAL DOWNLOAD FUNCTIONS
         function downloadHeightmap() {
             if (!heightmapData) {
                 alert('Please generate a map first!');
                 return;
             }
-            
+
             const canvas = generateBARHeightmap();
             canvas.toBlob(blob => {
                 const url = URL.createObjectURL(blob);
@@ -5415,13 +4048,13 @@ https://github.com/beyond-all-reason/bar-map-generator
                 URL.revokeObjectURL(url);
             });
         }
-        
+
         function downloadMetalmap() {
             if (!heightmapData) {
                 alert('Please generate a map first!');
                 return;
             }
-            
+
             const canvas = generateBARMetalmap();
             canvas.toBlob(blob => {
                 const url = URL.createObjectURL(blob);
@@ -5432,13 +4065,13 @@ https://github.com/beyond-all-reason/bar-map-generator
                 URL.revokeObjectURL(url);
             });
         }
-        
+
         function downloadNormalmap() {
             if (!heightmapData) {
                 alert('Please generate a map first!');
                 return;
             }
-            
+
             const canvas = generateBARNormalmap();
             canvas.toBlob(blob => {
                 const url = URL.createObjectURL(blob);
@@ -5449,13 +4082,13 @@ https://github.com/beyond-all-reason/bar-map-generator
                 URL.revokeObjectURL(url);
             });
         }
-        
+
         function downloadSpecularmap() {
             if (!heightmapData) {
                 alert('Please generate a map first!');
                 return;
             }
-            
+
             const canvas = generateBARSpecularmap();
             canvas.toBlob(blob => {
                 const url = URL.createObjectURL(blob);
@@ -5466,13 +4099,13 @@ https://github.com/beyond-all-reason/bar-map-generator
                 URL.revokeObjectURL(url);
             });
         }
-        
+
         function downloadMinimap() {
             if (!heightmapData) {
                 alert('Please generate a map first!');
                 return;
             }
-            
+
             const canvas = generateBARMinimap();
             canvas.toBlob(blob => {
                 const url = URL.createObjectURL(blob);
@@ -5483,27 +4116,27 @@ https://github.com/beyond-all-reason/bar-map-generator
                 URL.revokeObjectURL(url);
             });
         }
-        
+
         function downloadTexture() {
             if (!textureData) {
                 alert('Please generate a map first!');
                 return;
             }
-            
+
             const canvas = document.createElement('canvas');
             const size = mapConfig.size;
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext('2d');
-            
+
             const imageData = ctx.createImageData(size, size);
-            
+
             for (let i = 0; i < textureData.length; i++) {
                 imageData.data[i] = textureData[i];
             }
-            
+
             ctx.putImageData(imageData, 0, 0);
-            
+
             canvas.toBlob(blob => {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -5513,30 +4146,30 @@ https://github.com/beyond-all-reason/bar-map-generator
                 URL.revokeObjectURL(url);
             });
         }
-        
+
         // ZIP CREATION FOR COMPLETE MAP PACKAGE
         async function createCompleteMapPackage(assets, buildScripts, mapName) {
             if (typeof JSZip === 'undefined') {
                 throw new Error('JSZip library not available. Please reload the page.');
             }
-            
+
             const zip = new JSZip();
-            
+
             console.log("Creating complete BAR map package...");
-            
+
             // Create directory structure
             const assetsFolder = zip.folder("assets");
-            
+
             // Add build scripts (root level)
             zip.file("build_map.py", buildScripts.python);
             zip.file("build.bat", buildScripts.batch);
             zip.file("build.sh", buildScripts.bash);
             zip.file("requirements.txt", buildScripts.requirements);
             zip.file("README.md", buildScripts.readme);
-            
+
             // Add mapinfo.lua (root level for MapConv)
             zip.file("mapinfo.lua", assets.mapinfo);
-            
+
             // Convert canvases to blobs with correct formats for PyMapConv
             const heightmapBlob = await canvasToBlob(assets.heightmap, 'image/png');  // Keep PNG for heightmap
             const metalmapBlob = await canvasToBlob(assets.metalmap, 'image/bmp');
@@ -5547,7 +4180,7 @@ https://github.com/beyond-all-reason/bar-map-generator
             const grassmapBlob = await canvasToBlob(assets.grassmap, 'image/bmp');
             const typemapBlob = await canvasToBlob(assets.typemap, 'image/bmp');
             const splatmapBlob = await canvasToBlob(assets.splatmap, 'image/png');
-            
+
             // Add all asset files to assets folder
             // Add all asset files to assets folder with correct formats for PyMapConv
             assetsFolder.file("heightmap.bmp", heightmapBlob);  // BMP for heightmap (8-bit is acceptable)
@@ -5559,11 +4192,11 @@ https://github.com/beyond-all-reason/bar-map-generator
             assetsFolder.file("grassmap.bmp", grassmapBlob);
             assetsFolder.file("typemap.bmp", typemapBlob);
             assetsFolder.file("splatmap.png", splatmapBlob);
-            
+
             // Add package metadata
             zip.file("VERSION", "1.0\nGenerated by BAR Map Generator");
             zip.file("INSTALL.txt", generateInstallInstructions(mapName));
-            
+
             // Generate the ZIP file
             console.log("Generating complete package ZIP...");
             const zipBlob = await zip.generateAsync({
@@ -5573,11 +4206,11 @@ https://github.com/beyond-all-reason/bar-map-generator
                     level: 6
                 }
             });
-            
+
             console.log("Complete package generated successfully, size:", zipBlob.size, "bytes");
             return zipBlob;
         }
-        
+
         function generateInstallInstructions(mapName) {
             return `BAR Map Builder - Installationsanleitung
 ==========================================
@@ -5620,7 +4253,7 @@ Erstellt: ${new Date().toLocaleDateString('de-DE')}
 Generator: BAR Map Generator v1.0
 `;
         }
-        
+
         function canvasToBlob(canvas, type = 'image/png') {
             return new Promise(resolve => {
                 // For BMP files, we need to ensure RGB format (no alpha)
@@ -5630,24 +4263,24 @@ Generator: BAR Map Generator v1.0
                     rgbCanvas.width = canvas.width;
                     rgbCanvas.height = canvas.height;
                     const rgbCtx = rgbCanvas.getContext('2d', { alpha: false });
-                    
+
                     // Fill with black background (for heightmaps/metal) or white (for textures)
                     rgbCtx.fillStyle = 'black';
                     rgbCtx.fillRect(0, 0, rgbCanvas.width, rgbCanvas.height);
-                    
+
                     // Set composite operation to overwrite alpha
                     rgbCtx.globalCompositeOperation = 'source-over';
-                    
+
                     // Draw original canvas on top
                     rgbCtx.drawImage(canvas, 0, 0);
-                    
+
                     // Force RGB by creating image data and removing alpha
                     const imageData = rgbCtx.getImageData(0, 0, rgbCanvas.width, rgbCanvas.height);
                     for (let i = 3; i < imageData.data.length; i += 4) {
                         imageData.data[i] = 255; // Set alpha to 255 (opaque)
                     }
                     rgbCtx.putImageData(imageData, 0, 0);
-                    
+
                     // Convert to blob as PNG (browsers don't support BMP creation well)
                     rgbCanvas.toBlob(resolve, 'image/png');
                 } else {
@@ -5655,7 +4288,7 @@ Generator: BAR Map Generator v1.0
                 }
             });
         }
-        
+
         function generateReadme(mapName) {
             return `BAR Map: ${mapName}
 =========================
@@ -5692,11 +4325,11 @@ BAR Map Generator
 https://github.com/beyond-all-reason/bar-map-generator
 `;
         }
-        
+
         function generateBARMapInfo() {
             const config = mapConfig;
             const mapUnits = config.size / 64;
-            
+
             return `-- Beyond All Reason Map Configuration
 -- Generated by BAR Map Generator
 -- Map Size: ${config.size}x${config.size} (${mapUnits}x${mapUnits} units)
@@ -5743,7 +4376,7 @@ return {
     
     -- Start positions
     teams = {`;
-            
+
             config.startPositions.forEach((pos, index) => {
                 const springX = pos.x * 8; // Convert to Spring coordinates
                 const springZ = pos.y * 8;
@@ -5753,13 +4386,13 @@ return {
             startposz = ${springZ},
         },`;
             }).join('');
-            
+
             const mapInfo = `
     },
     
     -- Metal spots
     metal = {`;
-            
+
             resourceData.metalSpots.forEach((spot, index) => {
                 const springX = spot.x * 8;
                 const springZ = spot.y * 8;
@@ -5770,13 +4403,13 @@ return {
             metal = ${spot.value.toFixed(1)},
         },`;
             }).join('');
-            
+
             const geoInfo = `
     },
     
     -- Geothermal spots  
     geothermal = {`;
-            
+
             resourceData.geoSpots.forEach((spot, index) => {
                 const springX = spot.x * 8;
                 const springZ = spot.y * 8;
@@ -5787,7 +4420,7 @@ return {
             energy = ${spot.value.toFixed(0)},
         },`;
             }).join('');
-            
+
             const endInfo = `
     },
     
@@ -5855,10 +4488,10 @@ return {
     -- Map features can be added here
     featureplacer = {},
 }`;
-            
+
             return mapInfo + geoInfo + endInfo;
         }
-        
+
         function generateBARMapHelper() {
             return `-- Map Helper for BAR
 -- Generated by BAR Map Generator
@@ -5877,13 +4510,13 @@ end
 
 return {}`;
         }
-        
+
         function downloadConfig() {
             if (!mapConfig) {
                 alert('Please generate a map first!');
                 return;
             }
-            
+
             const luaConfig = generateBARMapInfo();
             const blob = new Blob([luaConfig], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
@@ -5893,13 +4526,12 @@ return {}`;
             a.click();
             URL.revokeObjectURL(url);
         }
-        
+
         // Initialize displays on page load
-        window.addEventListener('load', function() {
+        window.addEventListener('load', function () {
             updateValueDisplays();
-            initWebGL();
-            initCameraControls();
         });
     </script>
 </body>
+
 </html>

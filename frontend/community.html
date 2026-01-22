@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAR Community Map Portal</title>
+    <link rel="stylesheet" href="community.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-container">
+            <h1 class="logo">🗺️ BAR Community Maps</h1>
+            <nav class="nav">
+                <a href="#browse" class="nav-link active">Browse</a>
+                <a href="#upload" class="nav-link">Upload</a>
+                <a href="#my-maps" class="nav-link">My Maps</a>
+                <div class="auth-section">
+                    <button id="loginBtn" class="auth-btn">Login</button>
+                    <button id="registerBtn" class="auth-btn secondary">Register</button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <section class="search-section">
+            <div class="search-container">
+                <input
+                    type="text"
+                    id="searchInput"
+                    class="search-input"
+                    placeholder="Search maps by name, creator, or tags..."
+                />
+                <button id="searchBtn" class="search-btn">🔍 Search</button>
+            </div>
+
+            <div class="filters">
+                <div class="filter-group">
+                    <label for="terrainFilter">Terrain Type:</label>
+                    <select id="terrainFilter" class="filter-select">
+                        <option value="">All Terrains</option>
+                        <option value="continental">Continental</option>
+                        <option value="islands">Islands</option>
+                        <option value="canyon">Canyon</option>
+                        <option value="hills">Hills</option>
+                        <option value="flat">Flat</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="sizeFilter">Map Size:</label>
+                    <select id="sizeFilter" class="filter-select">
+                        <option value="">All Sizes</option>
+                        <option value="512">512x512 (Small)</option>
+                        <option value="1024">1024x1024 (Medium)</option>
+                        <option value="2048">2048x2048 (Large)</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="playersFilter">Player Count:</label>
+                    <select id="playersFilter" class="filter-select">
+                        <option value="">Any Players</option>
+                        <option value="2">2 Players</option>
+                        <option value="4">4 Players</option>
+                        <option value="6">6 Players</option>
+                        <option value="8">8+ Players</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="sortBy">Sort By:</label>
+                    <select id="sortBy" class="filter-select">
+                        <option value="newest">Newest First</option>
+                        <option value="rating">Highest Rated</option>
+                        <option value="downloads">Most Downloaded</option>
+                        <option value="name">Name (A-Z)</option>
+                    </select>
+                </div>
+
+                <button id="resetFiltersBtn" class="reset-btn">🔄 Reset Filters</button>
+            </div>
+        </section>
+
+        <section class="maps-section">
+            <div class="section-header">
+                <h2>Community Maps</h2>
+                <div class="map-count">
+                    Showing <span id="mapCount">0</span> maps
+                </div>
+            </div>
+
+            <div id="mapsGrid" class="maps-grid">
+                <!-- Maps will be dynamically loaded here -->
+                <div class="loading">
+                    <p>Loading maps...</p>
+                </div>
+            </div>
+
+            <div class="pagination">
+                <button id="prevPageBtn" class="pagination-btn" disabled>← Previous</button>
+                <span id="pageInfo" class="page-info">Page 1 of 1</span>
+                <button id="nextPageBtn" class="pagination-btn">Next →</button>
+            </div>
+        </section>
+
+        <section id="uploadSection" class="upload-section hidden">
+            <div class="upload-container">
+                <h2>Upload Your Map</h2>
+                <form id="uploadForm" class="upload-form">
+                    <div class="form-group">
+                        <label for="mapName">Map Name *</label>
+                        <input
+                            type="text"
+                            id="mapName"
+                            class="form-input"
+                            placeholder="Enter map name"
+                            required
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="mapDescription">Description *</label>
+                        <textarea
+                            id="mapDescription"
+                            class="form-textarea"
+                            rows="4"
+                            placeholder="Describe your map (terrain features, strategy tips, etc.)"
+                            required
+                        ></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="mapTerrain">Terrain Type *</label>
+                            <select id="mapTerrain" class="form-select" required>
+                                <option value="">Select terrain</option>
+                                <option value="continental">Continental</option>
+                                <option value="islands">Islands</option>
+                                <option value="canyon">Canyon</option>
+                                <option value="hills">Hills</option>
+                                <option value="flat">Flat</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="mapSize">Map Size *</label>
+                            <select id="mapSize" class="form-select" required>
+                                <option value="">Select size</option>
+                                <option value="512">512x512 (Small)</option>
+                                <option value="1024">1024x1024 (Medium)</option>
+                                <option value="2048">2048x2048 (Large)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="mapPlayers">Player Count *</label>
+                            <select id="mapPlayers" class="form-select" required>
+                                <option value="">Select players</option>
+                                <option value="2">2 Players</option>
+                                <option value="4">4 Players</option>
+                                <option value="6">6 Players</option>
+                                <option value="8">8 Players</option>
+                                <option value="10">10 Players</option>
+                                <option value="16">16 Players</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="mapTags">Tags (comma-separated)</label>
+                            <input
+                                type="text"
+                                id="mapTags"
+                                class="form-input"
+                                placeholder="e.g., balanced, naval, resource-rich"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="mapFile">Map File (.sd7) *</label>
+                        <input
+                            type="file"
+                            id="mapFile"
+                            class="form-file"
+                            accept=".sd7"
+                            required
+                        />
+                        <small class="form-hint">Must be a compiled BAR map file (.sd7)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="mapPreview">Preview Image (Optional)</label>
+                        <input
+                            type="file"
+                            id="mapPreview"
+                            class="form-file"
+                            accept="image/png,image/jpeg"
+                        />
+                        <small class="form-hint">PNG or JPG, recommended 1024x1024</small>
+                        <div id="previewContainer" style="margin-top: 10px; display: none;">
+                            <img id="previewImageDisplay" style="max-width: 200px; border-radius: 8px; border: 2px solid #ffd700;" />
+                            <small style="display: block; margin-top: 5px; color: #ffd700;">✓ Auto-generated from map canvas</small>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="submit-btn">📤 Upload Map</button>
+                        <button type="button" id="cancelUploadBtn" class="cancel-btn">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <section id="mapDetailSection" class="map-detail-section hidden">
+            <div class="map-detail-container">
+                <button id="backToGridBtn" class="back-btn">← Back to Maps</button>
+                <div id="mapDetailContent">
+                    <!-- Map detail will be dynamically loaded here -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2024 BAR Community Map Portal | Share and discover amazing maps for Beyond All Reason</p>
+            <p class="footer-links">
+                <a href="https://beyondallreason.info/" target="_blank">BAR Website</a>
+                <span>|</span>
+                <a href="https://github.com/Beyond-All-Reason/BAR" target="_blank">GitHub</a>
+                <span>|</span>
+                <a href="https://discord.gg/beyondallreason" target="_blank">Discord</a>
+            </p>
+        </div>
+    </footer>
+
+    <!-- Auth Modal -->
+    <div id="authModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="authModalTitle">Login</h2>
+                <button id="closeModalBtn" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="authForm" class="auth-form">
+                    <div id="registerFields" class="hidden">
+                        <div class="form-group">
+                            <label for="authUsername">Username *</label>
+                            <input
+                                type="text"
+                                id="authUsername"
+                                class="form-input"
+                                placeholder="Choose a username"
+                                minlength="3"
+                                required
+                            />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label id="emailLabel" for="authEmail">Email *</label>
+                        <input
+                            type="email"
+                            id="authEmail"
+                            class="form-input"
+                            placeholder="your@email.com"
+                            required
+                        />
+                        <small id="emailHint" class="form-hint" style="display: none;">Enter your username or email</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="authPassword">Password *</label>
+                        <input
+                            type="password"
+                            id="authPassword"
+                            class="form-input"
+                            placeholder="Enter password"
+                            minlength="8"
+                            required
+                        />
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="submit-btn">Submit</button>
+                        <button type="button" id="switchAuthModeBtn" class="switch-btn">
+                            Need an account? Register
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="community.js"></script>
+</body>
+</html>
