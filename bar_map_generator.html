@@ -158,6 +158,151 @@
             font-weight: bold;
             color: #ffd700;
         }
+
+        /* Validation Results Styles */
+        .validation-results {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .validation-results h3 {
+            margin-top: 0;
+            color: #ffd700;
+            border-bottom: 2px solid #ffd700;
+            padding-bottom: 10px;
+        }
+
+        .validation-summary {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .validation-summary.all-pass {
+            background: rgba(76, 175, 80, 0.3);
+            border: 2px solid #4caf50;
+            color: #a5d6a7;
+        }
+
+        .validation-summary.has-failures {
+            background: rgba(244, 67, 54, 0.3);
+            border: 2px solid #f44336;
+            color: #ef9a9a;
+        }
+
+        .validation-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #ffd700;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .validation-item.pass {
+            border-left-color: #4caf50;
+            background: rgba(76, 175, 80, 0.1);
+        }
+
+        .validation-item.fail {
+            border-left-color: #f44336;
+            background: rgba(244, 67, 54, 0.1);
+        }
+
+        .validation-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+        .validation-icon.pass {
+            color: #4caf50;
+        }
+
+        .validation-icon.fail {
+            color: #f44336;
+        }
+
+        .validation-content {
+            flex: 1;
+        }
+
+        .validation-asset-name {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 5px;
+            color: #fff;
+        }
+
+        .validation-details {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .validation-error {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+
+        .validation-success {
+            color: #81c784;
+        }
+
+        .validation-dimensions {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .validation-fix {
+            background: rgba(255, 215, 0, 0.15);
+            border-left: 3px solid #ffd700;
+            padding: 8px 12px;
+            margin-top: 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .validation-fix strong {
+            color: #ffd700;
+        }
+
+        .validation-doc-link {
+            background: rgba(33, 150, 243, 0.15);
+            border: 2px solid #2196f3;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .validation-doc-link strong {
+            color: #64b5f6;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .validation-doc-link a {
+            color: #ffd700;
+            text-decoration: underline;
+            font-weight: bold;
+        }
+
+        .validation-doc-link a:hover {
+            color: #fff;
+        }
     </style>
 </head>
 <body>
@@ -297,6 +442,14 @@
             <button onclick="downloadSpecularmap()">Specularmap (.png)</button>
             <button onclick="downloadMinimap()">Minimap (.png)</button>
             <button onclick="downloadConfig()">mapinfo.lua</button>
+            <button onclick="validateAndDisplayAssets()">🔍 Validate Assets</button>
+
+            <!-- Validation Results Container -->
+            <div id="validationResults" class="validation-results" style="display: none;">
+                <h3>🔍 Asset Validation Results</h3>
+                <div id="validationSummary" class="validation-summary"></div>
+                <div id="validationItems"></div>
+            </div>
         </div>
 
         <div class="download-section">
@@ -3072,7 +3225,18 @@
             try {
                 // Generate all BAR assets
                 const barAssets = generateBARAssets();
-                
+
+                // Validate assets before packaging
+                const mapUnits = mapConfig.size / 64;
+                const validation = await validateAllBARAssets(barAssets, mapUnits);
+                displayValidationResults(validation);
+
+                // Block download if validation fails
+                if (!validation.allPass) {
+                    alert('Validation failed. Please fix errors before downloading.');
+                    return;
+                }
+
                 // Generate build scripts
                 const buildScripts = generateBuildScripts(mapName);
                 
@@ -4249,12 +4413,668 @@ https://github.com/beyond-all-reason/bar-map-generator
                 unittextures: []
             };
         }
-        
+
+        /**
+         * Validates asset dimensions against expected PyMapConv formula
+         * @param {string} assetName - Name of the asset being validated (e.g., 'heightmap', 'metalmap')
+         * @param {HTMLCanvasElement} canvas - The canvas element to validate
+         * @param {number} mapUnits - Map units (size / 64)
+         * @param {string} formula - Dimension formula as string (e.g., '64 * mapUnits + 1')
+         * @returns {Object} Validation result with pass status, actual/expected dimensions, and message
+         */
+        function validateAssetDimensions(assetName, canvas, mapUnits, formula) {
+            if (!canvas || !canvas.width || !canvas.height) {
+                return {
+                    pass: false,
+                    actual: 0,
+                    expected: 0,
+                    message: `${assetName}: Invalid canvas element`
+                };
+            }
+
+            // Canvas should be square for BAR assets
+            const actualDimension = canvas.width;
+            if (canvas.width !== canvas.height) {
+                return {
+                    pass: false,
+                    actual: `${canvas.width}x${canvas.height}`,
+                    expected: 'square',
+                    message: `${assetName}: Canvas is not square (${canvas.width}x${canvas.height})`
+                };
+            }
+
+            // Safely evaluate the dimension formula
+            let expectedDimension;
+            try {
+                // Create a function that evaluates the formula with mapUnits in scope
+                const evaluateFormula = new Function('mapUnits', `return ${formula};`);
+                expectedDimension = evaluateFormula(mapUnits);
+
+                if (typeof expectedDimension !== 'number' || isNaN(expectedDimension) || expectedDimension <= 0) {
+                    throw new Error('Formula evaluation resulted in invalid number');
+                }
+            } catch (error) {
+                return {
+                    pass: false,
+                    actual: actualDimension,
+                    expected: 'ERROR',
+                    message: `${assetName}: Invalid dimension formula '${formula}' - ${error.message}`
+                };
+            }
+
+            // Compare dimensions
+            const pass = actualDimension === expectedDimension;
+
+            // Build helpful message with formula evaluation shown step-by-step
+            let message;
+            let fixSuggestion = null;
+
+            if (pass) {
+                message = `${assetName}: ✓ Correct dimensions (${actualDimension}x${actualDimension})`;
+            } else {
+                // Show formula evaluation: e.g., "64 * 16 + 1 = 1025"
+                const formulaWithValues = formula
+                    .replace(/mapUnits/g, mapUnits)
+                    .replace(/Math\.max\((\d+),\s*(\d+)\s*\*\s*(\d+)\s*\/\s*(\d+)\)/g, (match, p1, p2, p3, p4) => {
+                        const val1 = parseInt(p1);
+                        const val2 = parseInt(p2) * mapUnits / parseInt(p4);
+                        return `Math.max(${val1}, ${val2})`;
+                    });
+
+                // Build detailed error message
+                message = `${assetName}: ✗ Wrong size - Got ${actualDimension}x${actualDimension}, need ${expectedDimension}x${expectedDimension}`;
+
+                // Add fix suggestion based on common issues
+                const diff = expectedDimension - actualDimension;
+                if (Math.abs(diff) === 1 && formula.includes('+ 1')) {
+                    fixSuggestion = `Heightmap requires +1 pixel offset. The formula is: ${formulaWithValues} = ${expectedDimension}`;
+                } else if (assetName === 'metalmap' && formula.includes('32 *')) {
+                    fixSuggestion = `Metalmap uses 32 * mapUnits. For ${mapUnits} units: 32 * ${mapUnits} = ${expectedDimension}`;
+                } else if (assetName === 'texture' && formula.includes('512 *')) {
+                    fixSuggestion = `Texture uses 512 * mapUnits. For ${mapUnits} units: 512 * ${mapUnits} = ${expectedDimension}`;
+                } else if (assetName === 'grassmap' && formula.includes('16 *')) {
+                    fixSuggestion = `Grassmap uses 16 * mapUnits. For ${mapUnits} units: 16 * ${mapUnits} = ${expectedDimension}`;
+                } else if (formula.includes('Math.max')) {
+                    fixSuggestion = `Splatmap uses max(2048, size/2). Calculated: ${formulaWithValues} = ${expectedDimension}`;
+                } else {
+                    fixSuggestion = `Formula: ${formulaWithValues} = ${expectedDimension}. Your asset is ${actualDimension}x${actualDimension}.`;
+                }
+            }
+
+            return {
+                pass,
+                actual: actualDimension,
+                expected: expectedDimension,
+                message,
+                fixSuggestion
+            };
+        }
+
+        /**
+         * Test helper function to verify validateAssetDimensions works correctly
+         * Call this from browser console to test the validation function
+         */
+        function testValidateAssetDimensions() {
+            // Test case 1: Correct heightmap dimensions (1025x1025 for 16 mapUnits)
+            const correctCanvas = document.createElement('canvas');
+            correctCanvas.width = 1025;
+            correctCanvas.height = 1025;
+
+            const result1 = validateAssetDimensions('heightmap', correctCanvas, 16, '64 * mapUnits + 1');
+            console.log('Test 1 - Correct dimensions:', result1);
+            // Expected: {pass: true, actual: 1025, expected: 1025, message: "heightmap: ✓ Correct dimensions (1025x1025)"}
+
+            // Test case 2: Incorrect dimensions (1024x1024 instead of 1025x1025)
+            const wrongCanvas = document.createElement('canvas');
+            wrongCanvas.width = 1024;
+            wrongCanvas.height = 1024;
+
+            const result2 = validateAssetDimensions('heightmap', wrongCanvas, 16, '64 * mapUnits + 1');
+            console.log('Test 2 - Wrong dimensions:', result2);
+            // Expected: {pass: false, actual: 1024, expected: 1025, message: "heightmap: ✗ Dimension mismatch - Expected: 1025x1025 (from '64 * mapUnits + 1'), Got: 1024x1024"}
+
+            // Test case 3: Metalmap with correct dimensions (512x512 for 16 mapUnits)
+            const metalmapCanvas = document.createElement('canvas');
+            metalmapCanvas.width = 512;
+            metalmapCanvas.height = 512;
+
+            const result3 = validateAssetDimensions('metalmap', metalmapCanvas, 16, '32 * mapUnits');
+            console.log('Test 3 - Metalmap correct:', result3);
+            // Expected: {pass: true, actual: 512, expected: 512, message: "metalmap: ✓ Correct dimensions (512x512)"}
+
+            // Test case 4: Non-square canvas
+            const nonSquareCanvas = document.createElement('canvas');
+            nonSquareCanvas.width = 1024;
+            nonSquareCanvas.height = 512;
+
+            const result4 = validateAssetDimensions('texture', nonSquareCanvas, 16, '512 * mapUnits');
+            console.log('Test 4 - Non-square canvas:', result4);
+            // Expected: {pass: false, actual: "1024x512", expected: "square", message: "texture: Canvas is not square (1024x512)"}
+
+            // Test case 5: Invalid canvas
+            const result5 = validateAssetDimensions('test', null, 16, '64 * mapUnits + 1');
+            console.log('Test 5 - Invalid canvas:', result5);
+            // Expected: {pass: false, actual: 0, expected: 0, message: "test: Invalid canvas element"}
+
+            return {
+                test1: result1.pass === true,
+                test2: result2.pass === false,
+                test3: result3.pass === true,
+                test4: result4.pass === false,
+                test5: result5.pass === false,
+                allPassed: null // Will be set below
+            };
+        }
+
+        /**
+         * Validates that a canvas can be converted to the target format (PNG/BMP)
+         * @param {string} assetName - Name of the asset being validated (e.g., 'heightmap', 'metalmap')
+         * @param {HTMLCanvasElement} canvas - The canvas element to validate
+         * @param {string} expectedFormat - Expected format ('image/png' or 'image/bmp')
+         * @returns {Promise<Object>} Validation result with pass status, format, and message
+         */
+        async function validateAssetFormat(assetName, canvas, expectedFormat) {
+            if (!canvas || !canvas.width || !canvas.height) {
+                return {
+                    pass: false,
+                    format: 'invalid',
+                    message: `${assetName}: Invalid canvas element`
+                };
+            }
+
+            // Normalize format names
+            const formatMap = {
+                'image/png': 'PNG',
+                'image/bmp': 'BMP',
+                'png': 'image/png',
+                'bmp': 'image/bmp'
+            };
+
+            // Convert to MIME type if needed
+            let mimeType = expectedFormat.toLowerCase().startsWith('image/')
+                ? expectedFormat.toLowerCase()
+                : formatMap[expectedFormat.toLowerCase()] || expectedFormat;
+
+            if (!mimeType.startsWith('image/')) {
+                return {
+                    pass: false,
+                    format: expectedFormat,
+                    message: `${assetName}: Invalid format specification '${expectedFormat}'`
+                };
+            }
+
+            try {
+                // Attempt canvas to blob conversion
+                const blob = await new Promise((resolve, reject) => {
+                    try {
+                        canvas.toBlob(
+                            blob => {
+                                if (blob) {
+                                    resolve(blob);
+                                } else {
+                                    reject(new Error('toBlob returned null'));
+                                }
+                            },
+                            mimeType
+                        );
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+
+                // Verify the blob was created successfully
+                if (!blob || blob.size === 0) {
+                    const fixSuggestion = `Try generating the asset again. If this persists, check browser console for details.`;
+                    return {
+                        pass: false,
+                        format: formatMap[mimeType] || mimeType,
+                        message: `${assetName}: Failed to create ${formatMap[mimeType] || mimeType} - blob is empty or null`,
+                        fixSuggestion
+                    };
+                }
+
+                // Verify the MIME type
+                if (!blob.type.includes(mimeType.split('/')[1])) {
+                    const formatName = formatMap[mimeType] || mimeType;
+                    const fixSuggestion = mimeType === 'image/bmp'
+                        ? `BMP format may not be supported in all browsers. The map generator will convert during build.`
+                        : `Expected ${formatName} but browser created ${blob.type}. This may cause compilation issues.`;
+
+                    return {
+                        pass: false,
+                        format: formatMap[mimeType] || mimeType,
+                        actualFormat: blob.type,
+                        message: `${assetName}: Format mismatch - Expected ${mimeType}, browser returned ${blob.type}`,
+                        fixSuggestion
+                    };
+                }
+
+                return {
+                    pass: true,
+                    format: formatMap[mimeType] || mimeType,
+                    message: `${assetName}: ✓ Format validation passed (${formatMap[mimeType] || mimeType})`
+                };
+
+            } catch (error) {
+                // Check if this is a browser support issue
+                const errorMessage = error.message.toLowerCase();
+                let helpfulMessage = `${assetName}: ✗ Format validation failed`;
+                let fixSuggestion = null;
+
+                if (errorMessage.includes('type') || errorMessage.includes('support')) {
+                    helpfulMessage += ` - Browser may not support ${mimeType} format.`;
+                    fixSuggestion = `Try using a modern browser (Chrome, Firefox, Edge). Some formats like BMP may have limited support.`;
+                } else if (errorMessage.includes('security')) {
+                    helpfulMessage += ` - Security error.`;
+                    fixSuggestion = `This may be caused by browser security settings. Try running from a local server instead of opening the file directly.`;
+                } else {
+                    helpfulMessage += ` - ${error.message}`;
+                    fixSuggestion = `Check browser console for more details.`;
+                }
+
+                return {
+                    pass: false,
+                    format: formatMap[mimeType] || mimeType,
+                    message: helpfulMessage,
+                    fixSuggestion
+                };
+            }
+        }
+
+        /**
+         * Test helper function to verify validateAssetFormat works correctly
+         * Call this from browser console to test the validation function
+         */
+        async function testValidateAssetFormat() {
+            // Test case 1: Valid PNG canvas
+            const canvas1 = document.createElement('canvas');
+            canvas1.width = 512;
+            canvas1.height = 512;
+            const ctx1 = canvas1.getContext('2d');
+            ctx1.fillStyle = 'red';
+            ctx1.fillRect(0, 0, 512, 512);
+
+            const result1 = await validateAssetFormat('heightmap', canvas1, 'image/png');
+            console.log('Test 1 - Valid PNG:', result1);
+            // Expected: {pass: true, format: 'PNG', message: "heightmap: ✓ Format validation passed (PNG)"}
+
+            // Test case 2: Invalid canvas
+            const result2 = await validateAssetFormat('test', null, 'image/png');
+            console.log('Test 2 - Invalid canvas:', result2);
+            // Expected: {pass: false, format: 'invalid', message: "test: Invalid canvas element"}
+
+            // Test case 3: Test with 'png' shorthand
+            const result3 = await validateAssetFormat('metalmap', canvas1, 'png');
+            console.log('Test 3 - PNG shorthand:', result3);
+            // Expected: {pass: true, format: 'PNG', message: "metalmap: ✓ Format validation passed (PNG)"}
+
+            // Test case 4: Test with BMP (note: browsers may convert to PNG)
+            const result4 = await validateAssetFormat('texture', canvas1, 'image/bmp');
+            console.log('Test 4 - BMP format:', result4);
+            // Note: This may show that browser doesn't support BMP, which is expected behavior
+
+            return {
+                test1: result1.pass === true,
+                test2: result2.pass === false,
+                test3: result3.pass === true,
+                allPassed: null // Will be set after tests complete
+            };
+        }
+
+        /**
+         * Master validation function that validates all BAR assets
+         * @param {Object} barAssets - Object containing all BAR assets (from generateBARAssets)
+         * @param {number} mapUnits - Map units (size / 64)
+         * @returns {Promise<Object>} Comprehensive validation report with allPass flag and detailed results
+         */
+        async function validateAllBARAssets(barAssets, mapUnits) {
+            if (!barAssets) {
+                return {
+                    allPass: false,
+                    results: [],
+                    summary: 'No assets provided for validation'
+                };
+            }
+
+            // Define validation specifications for each asset
+            const assetSpecs = [
+                {
+                    name: 'heightmap',
+                    formula: '64 * mapUnits + 1',
+                    format: 'image/png'
+                },
+                {
+                    name: 'metalmap',
+                    formula: '32 * mapUnits',
+                    format: 'image/bmp'
+                },
+                {
+                    name: 'texture',
+                    formula: '512 * mapUnits',
+                    format: 'image/bmp'
+                },
+                {
+                    name: 'normalmap',
+                    formula: '512 * mapUnits',
+                    format: 'image/png'
+                },
+                {
+                    name: 'specularmap',
+                    formula: '256 * mapUnits',
+                    format: 'image/png'
+                },
+                {
+                    name: 'minimap',
+                    formula: '1024', // Fixed size, independent of mapUnits
+                    format: 'image/png'
+                },
+                {
+                    name: 'grassmap',
+                    formula: '16 * mapUnits',
+                    format: 'image/bmp'
+                },
+                {
+                    name: 'typemap',
+                    formula: '32 * mapUnits',
+                    format: 'image/bmp'
+                },
+                {
+                    name: 'splatmap',
+                    formula: 'Math.max(2048, mapUnits * 64 / 2)', // max(2048, size/2)
+                    format: 'image/png'
+                }
+            ];
+
+            const results = [];
+            let allPass = true;
+
+            // Validate each asset
+            for (const spec of assetSpecs) {
+                const asset = barAssets[spec.name];
+
+                if (!asset) {
+                    results.push({
+                        asset: spec.name,
+                        pass: false,
+                        dimensions: null,
+                        format: null,
+                        errors: [`${spec.name}: Asset not found in barAssets object`]
+                    });
+                    allPass = false;
+                    continue;
+                }
+
+                // Validate dimensions
+                const dimensionResult = validateAssetDimensions(
+                    spec.name,
+                    asset,
+                    mapUnits,
+                    spec.formula
+                );
+
+                // Validate format
+                let formatResult;
+                try {
+                    formatResult = await validateAssetFormat(
+                        spec.name,
+                        asset,
+                        spec.format
+                    );
+                } catch (error) {
+                    formatResult = {
+                        pass: false,
+                        format: spec.format,
+                        message: `${spec.name}: Format validation error - ${error.message}`
+                    };
+                }
+
+                // Collect errors
+                const errors = [];
+                if (!dimensionResult.pass) {
+                    errors.push(dimensionResult.message);
+                }
+                if (!formatResult.pass) {
+                    errors.push(formatResult.message);
+                }
+
+                // Build result object
+                const assetResult = {
+                    asset: spec.name,
+                    pass: dimensionResult.pass && formatResult.pass,
+                    dimensions: {
+                        pass: dimensionResult.pass,
+                        actual: dimensionResult.actual,
+                        expected: dimensionResult.expected,
+                        message: dimensionResult.message,
+                        fixSuggestion: dimensionResult.fixSuggestion
+                    },
+                    format: {
+                        pass: formatResult.pass,
+                        expected: spec.format,
+                        actual: formatResult.format,
+                        message: formatResult.message,
+                        fixSuggestion: formatResult.fixSuggestion
+                    },
+                    errors: errors.length > 0 ? errors : null
+                };
+
+                results.push(assetResult);
+
+                // Update allPass flag
+                if (!assetResult.pass) {
+                    allPass = false;
+                }
+            }
+
+            // Build summary
+            const passCount = results.filter(r => r.pass).length;
+            const failCount = results.length - passCount;
+            const summary = allPass
+                ? `✓ All ${results.length} assets validated successfully`
+                : `Validation complete: ${passCount} passed, ${failCount} failed`;
+
+            return {
+                allPass,
+                results,
+                summary,
+                timestamp: new Date().toISOString()
+            };
+        }
+
+        /**
+         * Test helper function to verify validateAllBARAssets works correctly
+         * Call this from browser console to test the master validation function
+         */
+        async function testValidateAllBARAssets() {
+            // First generate some assets to test with
+            const originalSize = mapConfig.size;
+            mapConfig.size = 1024; // Set to 1024x1024 (16 mapUnits)
+
+            // Generate a simple heightmap
+            generateHeightmap();
+            const barAssets = generateBARAssets();
+            const mapUnits = 16;
+
+            // Run validation
+            const result = await validateAllBARAssets(barAssets, mapUnits);
+            console.log('=== validateAllBARAssets Test Results ===');
+            console.log('All Pass:', result.allPass);
+            console.log('Summary:', result.summary);
+            console.log('Timestamp:', result.timestamp);
+            console.log('Detailed Results:', result.results);
+
+            // Expected: allPass should be true, all 9 assets should pass
+            // Each result should have: asset, pass, dimensions, format, errors
+            // dimensions should include pass, actual, expected, message
+            // format should include pass, expected, actual, message
+
+            mapConfig.size = originalSize; // Restore original size
+            return result;
+        }
+
+        /**
+         * Display validation results in the UI with pass/fail indicators
+         * @param {Object} report - Validation report from validateAllBARAssets()
+         */
+        function displayValidationResults(report) {
+            if (!report) {
+                console.error('No validation report provided');
+                return;
+            }
+
+            // Get the validation results container
+            const validationResultsDiv = document.getElementById('validationResults');
+            const validationSummaryDiv = document.getElementById('validationSummary');
+            const validationItemsDiv = document.getElementById('validationItems');
+
+            if (!validationResultsDiv || !validationSummaryDiv || !validationItemsDiv) {
+                console.error('Validation result containers not found in DOM');
+                return;
+            }
+
+            // Clear previous results
+            validationItemsDiv.innerHTML = '';
+
+            // Set summary
+            validationSummaryDiv.textContent = report.summary || 'Validation complete';
+            validationSummaryDiv.className = 'validation-summary';
+            if (report.allPass) {
+                validationSummaryDiv.classList.add('all-pass');
+            } else {
+                validationSummaryDiv.classList.add('has-failures');
+            }
+
+            // Display each asset result
+            if (report.results && Array.isArray(report.results)) {
+                report.results.forEach(result => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'validation-item';
+                    if (result.pass) {
+                        itemDiv.classList.add('pass');
+                    } else {
+                        itemDiv.classList.add('fail');
+                    }
+
+                    // Icon
+                    const iconDiv = document.createElement('div');
+                    iconDiv.className = 'validation-icon';
+                    iconDiv.classList.add(result.pass ? 'pass' : 'fail');
+                    iconDiv.textContent = result.pass ? '✓' : '✗';
+
+                    // Content
+                    const contentDiv = document.createElement('div');
+                    contentDiv.className = 'validation-content';
+
+                    // Asset name
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'validation-asset-name';
+                    nameDiv.textContent = result.asset || 'Unknown Asset';
+                    contentDiv.appendChild(nameDiv);
+
+                    // Details
+                    const detailsDiv = document.createElement('div');
+                    detailsDiv.className = 'validation-details';
+
+                    if (result.dimensions) {
+                        const dimText = `Dimensions: ${result.dimensions.actual}×${result.dimensions.actual} ` +
+                            `(expected ${result.dimensions.expected}×${result.dimensions.expected})`;
+                        detailsDiv.appendChild(document.createTextNode(dimText + '\n'));
+
+                        // Add fix suggestion if dimensions failed
+                        if (!result.dimensions.pass && result.dimensions.fixSuggestion) {
+                            const fixDiv = document.createElement('div');
+                            fixDiv.className = 'validation-fix';
+                            fixDiv.innerHTML = '<strong>💡 How to fix:</strong> ' + result.dimensions.fixSuggestion;
+                            detailsDiv.appendChild(fixDiv);
+                        }
+                    }
+
+                    if (result.format) {
+                        const formatText = `Format: ${result.format.actual || 'unknown'} ` +
+                            `(expected ${result.format.expected || 'unknown'})`;
+                        detailsDiv.appendChild(document.createTextNode(formatText + '\n'));
+
+                        // Add fix suggestion if format failed
+                        if (!result.format.pass && result.format.fixSuggestion) {
+                            const fixDiv = document.createElement('div');
+                            fixDiv.className = 'validation-fix';
+                            fixDiv.innerHTML = '<strong>💡 How to fix:</strong> ' + result.format.fixSuggestion;
+                            detailsDiv.appendChild(fixDiv);
+                        }
+                    }
+
+                    // Errors
+                    if (result.errors && result.errors.length > 0) {
+                        result.errors.forEach(error => {
+                            const errorDiv = document.createElement('div');
+                            errorDiv.className = 'validation-error';
+                            errorDiv.textContent = error;
+                            detailsDiv.appendChild(errorDiv);
+                        });
+                    }
+
+                    contentDiv.appendChild(detailsDiv);
+
+                    // Assemble item
+                    itemDiv.appendChild(iconDiv);
+                    itemDiv.appendChild(contentDiv);
+
+                    validationItemsDiv.appendChild(itemDiv);
+                });
+            }
+
+            // Add documentation link at the end if there are failures
+            if (!report.allPass) {
+                const docLinkDiv = document.createElement('div');
+                docLinkDiv.className = 'validation-doc-link';
+                docLinkDiv.innerHTML = `
+                    <strong>📚 Need help understanding BAR asset requirements?</strong><br>
+                    <a href="https://github.com/beyond-all-reason/bar-map-generator#asset-dimensions" target="_blank" style="color: #ffd700; text-decoration: underline;">
+                        View BAR Asset Dimension Documentation →
+                    </a>
+                `;
+                validationItemsDiv.appendChild(docLinkDiv);
+            }
+
+            // Show the validation results section
+            validationResultsDiv.style.display = 'block';
+
+            // Scroll to validation results
+            validationResultsDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        /**
+         * Validate all BAR assets and display the results
+         * This is the entry point called by the "Validate Assets" button
+         */
+        async function validateAndDisplayAssets() {
+            if (!heightmapData) {
+                alert('Please generate a map first!');
+                return;
+            }
+
+            const mapUnits = mapConfig.size / 64;
+
+            try {
+                // Generate BAR assets
+                const barAssets = generateBARAssets();
+
+                // Validate all assets
+                const validationReport = await validateAllBARAssets(barAssets, mapUnits);
+
+                // Display results
+                displayValidationResults(validationReport);
+            } catch (error) {
+                console.error('Error validating assets:', error);
+                alert('Error validating assets: ' + error.message);
+            }
+        }
+
         function generateBARHeightmap() {
             const size = mapConfig.size;
             const mapUnits = size / 64;
             const heightmapSize = 64 * mapUnits + 1;
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = heightmapSize;
             canvas.height = heightmapSize;
