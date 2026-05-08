@@ -14,6 +14,7 @@ While the map generation and asset creation works, the automatic compilation sys
 
 - **Procedural Terrain Generation**: Multiple terrain types (Continental, Islands, Canyon, Hills, Flat)
 - **OSM Terrain Import**: Select a real-world area with OpenStreetMap and derive terrain from landscape, water, roads, land-use, and elevation data
+- **OSM Location Search**: Search addresses, cities, or landmarks before drawing a visible red selection rectangle
 - **Resource Distribution**: Automatic metal and geothermal spot placement
 - **Complete Asset Generation**: All required BAR map assets (heightmap, metalmap, texture, normalmap, etc.)
 - **Self-Compiling Packages**: Generates complete build packages with Python scripts
