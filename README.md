@@ -13,6 +13,7 @@ While the map generation and asset creation works, the automatic compilation sys
 ## 🎯 Features
 
 - **Procedural Terrain Generation**: Multiple terrain types (Continental, Islands, Canyon, Hills, Flat)
+- **OSM Terrain Import**: Select a real-world area with OpenStreetMap and derive terrain from landscape, water, roads, land-use, and elevation data
 - **Resource Distribution**: Automatic metal and geothermal spot placement
 - **Complete Asset Generation**: All required BAR map assets (heightmap, metalmap, texture, normalmap, etc.)
 - **Self-Compiling Packages**: Generates complete build packages with Python scripts
@@ -22,10 +23,11 @@ While the map generation and asset creation works, the automatic compilation sys
 ## 🚀 Quick Start
 
 1. Open `bar_map_generator.html` in your web browser
-2. Adjust map parameters (size, terrain type, resources)
-3. Click "Generate Map" to create preview
-4. Download complete map package
-5. Run the included build script to compile the map
+2. Choose either "Procedural" or "Import from OSM"
+3. Adjust map parameters or draw an OSM selection area
+4. Click "Generate Map" or "Generate from Selection" to create preview
+5. Download complete map package
+6. Run the included build script to compile the map
 
 ## 📋 Requirements
 
@@ -37,6 +39,7 @@ While the map generation and asset creation works, the automatic compilation sys
 ## 🛠️ How It Works
 
 1. **Generation**: Creates procedural terrain using noise algorithms
+   - OSM mode combines OpenStreetMap features with sampled elevation data
 2. **Asset Creation**: Generates all required BAR map files with correct dimensions
 3. **Package Creation**: Bundles everything into a self-compiling ZIP package
 4. **Compilation**: Uses PyMapConv to create the final .sd7 map file

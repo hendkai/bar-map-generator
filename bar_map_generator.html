@@ -8,6 +8,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700;800&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         *,*::before,*::after { box-sizing: border-box; }
@@ -495,6 +499,139 @@
             text-decoration: underline;
         }
 
+        /* Mode Tabs */
+        .mode-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 28px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .mode-tab {
+            padding: 12px 28px;
+            font-family: 'Exo 2', sans-serif;
+            font-weight: 600;
+            font-size: 0.85rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #666;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin: 0;
+            border-radius: 0;
+        }
+
+        .mode-tab:hover {
+            color: #aaa;
+            background: none;
+            box-shadow: none;
+        }
+
+        .mode-tab.active {
+            color: #3898ec;
+            border-bottom-color: #3898ec;
+            background: none;
+        }
+
+        .mode-panel { display: none; }
+        .mode-panel.active { display: block; }
+
+        /* OSM Import */
+        .osm-section {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 20px;
+            margin-bottom: 28px;
+        }
+
+        #osmMap {
+            width: 100%;
+            height: 500px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.08);
+            z-index: 1;
+        }
+
+        .osm-sidebar {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 6px;
+            padding: 20px;
+        }
+
+        .osm-sidebar h3 {
+            font-family: 'Exo 2', sans-serif;
+            font-weight: 600;
+            font-size: 0.8rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #3898ec;
+            margin: 0 0 14px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(56,152,236,0.2);
+        }
+
+        .osm-coords {
+            font-family: 'Ubuntu Mono', monospace;
+            font-size: 0.8rem;
+            color: #888;
+            background: rgba(0,0,0,0.2);
+            padding: 8px 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+
+        .osm-status {
+            font-size: 0.82rem;
+            color: #888;
+            margin: 12px 0;
+            padding: 10px;
+            border-radius: 4px;
+            background: rgba(0,0,0,0.15);
+        }
+
+        .osm-status.loading {
+            color: #3898ec;
+            border-left: 2px solid #3898ec;
+        }
+
+        .osm-status.success {
+            color: #4fff4a;
+            border-left: 2px solid #4fff4a;
+        }
+
+        .osm-status.error {
+            color: #ff4c4c;
+            border-left: 2px solid #ff4c4c;
+        }
+
+        .osm-status small {
+            display: block;
+            color: #777;
+            margin-top: 5px;
+            line-height: 1.5;
+        }
+
+        .osm-preview {
+            margin-top: 12px;
+            text-align: center;
+        }
+
+        .osm-preview canvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+
+        @media (max-width: 900px) {
+            .osm-section { grid-template-columns: 1fr; }
+            #osmMap { height: 350px; }
+        }
+
         @media (max-width: 600px) {
             .container { padding: 0 12px 40px; }
             .controls { grid-template-columns: 1fr; }
@@ -511,6 +648,12 @@
             <h1>BAR Map Generator<span class="subtitle">Beyond All Reason — Procedural Terrain</span></h1>
         </div>
 
+        <div class="mode-tabs">
+            <button class="mode-tab active" onclick="switchMode('procedural')">Procedural</button>
+            <button class="mode-tab" onclick="switchMode('osm')">Import from OSM</button>
+        </div>
+
+        <div id="panel-procedural" class="mode-panel active">
         <div class="controls">
             <div class="control-group">
                 <h3>Map Basics</h3>
@@ -644,9 +787,593 @@
         </div>
     </div>
 
+        <div id="panel-osm" class="mode-panel">
+            <div class="osm-section">
+                <div id="osmMap"></div>
+
+                <div class="osm-sidebar">
+                    <h3>OSM Terrain Import</h3>
+
+                    <label>BAR Map Size:
+                        <select id="osmMapSize">
+                            <option value="512">512x512 (Small)</option>
+                            <option value="1024" selected>1024x1024 (Medium)</option>
+                            <option value="2048">2048x2048 (Large)</option>
+                        </select>
+                    </label>
+
+                    <label>Player Count:
+                        <select id="osmPlayerCount">
+                            <option value="2">2 Players</option>
+                            <option value="4" selected>4 Players</option>
+                            <option value="6">6 Players</option>
+                            <option value="8">8 Players</option>
+                        </select>
+                    </label>
+
+                    <label>Terrain Exaggeration:
+                        <select id="osmHeightScale">
+                            <option value="0.7">Subtle</option>
+                            <option value="1.0" selected>Natural</option>
+                            <option value="1.35">Dramatic</option>
+                        </select>
+                    </label>
+
+                    <div id="osmCoords" class="osm-coords">Draw a rectangle on the map.</div>
+                    <div id="osmStatus" class="osm-status">
+                        Area limit: keep the selected region reasonably small for the public APIs.
+                        <small>Uses OSM/Overpass landscape data and Open-Meteo elevation samples.</small>
+                    </div>
+
+                    <button class="primary" onclick="generateOsmMap()">Generate from Selection</button>
+                    <button onclick="clearOsmSelection()">Clear Selection</button>
+
+                    <div class="osm-preview">
+                        <canvas id="osmPreviewCanvas" width="256" height="256"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="canvas-container">
+                <div class="canvas-wrapper">
+                    <h3>Heightmap</h3>
+                    <canvas id="osmHeightmapCanvas" width="512" height="512"></canvas>
+                </div>
+
+                <div class="canvas-wrapper">
+                    <h3>Texture Map</h3>
+                    <canvas id="osmTextureCanvas" width="512" height="512"></canvas>
+                </div>
+
+                <div class="canvas-wrapper">
+                    <h3>Resource Map</h3>
+                    <canvas id="osmResourceCanvas" width="512" height="512"></canvas>
+                </div>
+            </div>
+
+            <div class="download-section">
+                <h3>Export Generated OSM Map</h3>
+                <button class="primary" onclick="downloadCompleteMapPackage()">Download Complete Map Package (.zip)</button>
+                <button onclick="downloadHeightmap()">Heightmap</button>
+                <button onclick="downloadTexture()">Texture</button>
+                <button onclick="downloadConfig()">mapinfo.lua</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let heightmapData, textureData, resourceData;
         let mapConfig = {};
+        let osmMap = null;
+        let osmDrawLayer = null;
+        let osmSelectedBounds = null;
+        const OSM_MASK_SIZE = 512;
+
+        function switchMode(mode) {
+            document.querySelectorAll('.mode-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.mode-panel').forEach(panel => panel.classList.remove('active'));
+
+            document.getElementById(`panel-${mode}`).classList.add('active');
+            const activeTab = Array.from(document.querySelectorAll('.mode-tab'))
+                .find(tab => tab.getAttribute('onclick') === `switchMode('${mode}')`);
+            if (activeTab) activeTab.classList.add('active');
+
+            if (mode === 'osm') {
+                initOsmMap();
+                setTimeout(() => osmMap && osmMap.invalidateSize(), 50);
+            }
+        }
+
+        function initOsmMap() {
+            if (osmMap) return;
+
+            osmDrawLayer = new L.FeatureGroup();
+            osmMap = L.map('osmMap', { preferCanvas: true }).setView([52.52, 13.405], 11);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(osmMap);
+            osmDrawLayer.addTo(osmMap);
+
+            const drawControl = new L.Control.Draw({
+                draw: {
+                    polygon: false,
+                    polyline: false,
+                    circle: false,
+                    marker: false,
+                    circlemarker: false,
+                    rectangle: {
+                        shapeOptions: { color: '#3898ec', weight: 2 }
+                    }
+                },
+                edit: { featureGroup: osmDrawLayer }
+            });
+            osmMap.addControl(drawControl);
+
+            osmMap.on(L.Draw.Event.CREATED, function (event) {
+                osmDrawLayer.clearLayers();
+                osmDrawLayer.addLayer(event.layer);
+                osmSelectedBounds = event.layer.getBounds();
+                updateOsmSelectionDisplay();
+            });
+
+            osmMap.on(L.Draw.Event.EDITED, function () {
+                const layers = osmDrawLayer.getLayers();
+                osmSelectedBounds = layers.length ? layers[0].getBounds() : null;
+                updateOsmSelectionDisplay();
+            });
+
+            osmMap.on(L.Draw.Event.DELETED, clearOsmSelection);
+        }
+
+        function clearOsmSelection() {
+            if (osmDrawLayer) osmDrawLayer.clearLayers();
+            osmSelectedBounds = null;
+            document.getElementById('osmCoords').textContent = 'Draw a rectangle on the map.';
+            setOsmStatus('Area cleared.', '');
+            clearCanvas('osmPreviewCanvas');
+        }
+
+        function updateOsmSelectionDisplay() {
+            if (!osmSelectedBounds) return;
+
+            const south = osmSelectedBounds.getSouth();
+            const west = osmSelectedBounds.getWest();
+            const north = osmSelectedBounds.getNorth();
+            const east = osmSelectedBounds.getEast();
+            const areaKm2 = estimateBoundsAreaKm2(osmSelectedBounds);
+
+            document.getElementById('osmCoords').innerHTML =
+                `S ${south.toFixed(5)}, W ${west.toFixed(5)}<br>` +
+                `N ${north.toFixed(5)}, E ${east.toFixed(5)}<br>` +
+                `Area: ${areaKm2.toFixed(2)} km²`;
+
+            const statusClass = areaKm2 > 60 ? 'error' : areaKm2 > 25 ? 'loading' : 'success';
+            const message = areaKm2 > 60
+                ? 'Selection is quite large. Try a smaller area for the first pass.'
+                : 'Selection ready.';
+            setOsmStatus(message, statusClass);
+        }
+
+        function setOsmStatus(message, className = '') {
+            const status = document.getElementById('osmStatus');
+            status.className = `osm-status ${className}`.trim();
+            status.innerHTML = message;
+        }
+
+        function estimateBoundsAreaKm2(bounds) {
+            const latKm = Math.abs(bounds.getNorth() - bounds.getSouth()) * 111.32;
+            const midLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+            const lngKm = Math.abs(bounds.getEast() - bounds.getWest()) * 111.32 * Math.cos(midLat * Math.PI / 180);
+            return latKm * lngKm;
+        }
+
+        async function generateOsmMap() {
+            if (!osmSelectedBounds) {
+                alert('Please draw a rectangle on the OSM map first.');
+                return;
+            }
+
+            const areaKm2 = estimateBoundsAreaKm2(osmSelectedBounds);
+            if (areaKm2 > 80 && !confirm('This area is large and may be slow or rejected by public APIs. Continue?')) {
+                return;
+            }
+
+            const buttons = document.querySelectorAll('#panel-osm button');
+            buttons.forEach(btn => btn.disabled = true);
+
+            try {
+                setOsmStatus('Loading OpenStreetMap features...', 'loading');
+                const osmFeatures = await fetchOsmFeatures(osmSelectedBounds);
+
+                setOsmStatus(`Loaded ${osmFeatures.elements.length} OSM elements. Loading elevation samples...`, 'loading');
+                const elevationGrid = await fetchElevationGrid(osmSelectedBounds, 32);
+
+                setOsmStatus('Projecting OSM and elevation data into BAR terrain...', 'loading');
+                const generated = buildTerrainFromOsm(osmSelectedBounds, osmFeatures, elevationGrid);
+
+                heightmapData = generated.heightmap;
+                textureData = generated.texture;
+                resourceData = generated.resources;
+                mapConfig = generated.config;
+
+                drawOsmPreview(generated.featureMask);
+                drawHeightmapToCanvas(heightmapData, mapConfig.size, 'osmHeightmapCanvas');
+                drawTextureToCanvas(textureData, mapConfig.size, 'osmTextureCanvas');
+                drawResourceToCanvas(resourceData, mapConfig.size, mapConfig.startPositions, 'osmResourceCanvas');
+
+                setOsmStatus(
+                    `OSM map generated. Elevation samples: ${elevationGrid.values.length}, OSM elements: ${osmFeatures.elements.length}.`,
+                    'success'
+                );
+            } catch (error) {
+                console.error('OSM generation failed:', error);
+                setOsmStatus(`OSM generation failed: ${error.message}`, 'error');
+                alert('OSM generation failed: ' + error.message);
+            } finally {
+                buttons.forEach(btn => btn.disabled = false);
+            }
+        }
+
+        async function fetchOsmFeatures(bounds) {
+            const bbox = [
+                bounds.getSouth().toFixed(6),
+                bounds.getWest().toFixed(6),
+                bounds.getNorth().toFixed(6),
+                bounds.getEast().toFixed(6)
+            ].join(',');
+            const query = `
+                [out:json][timeout:25];
+                (
+                    way["natural"~"water|wood|scrub|heath|wetland|beach|sand|bare_rock|scree"](${bbox});
+                    relation["natural"~"water|wood|scrub|heath|wetland|beach|sand|bare_rock|scree"](${bbox});
+                    way["waterway"](${bbox});
+                    way["landuse"~"forest|grass|meadow|farmland|residential|industrial|quarry|military"](${bbox});
+                    relation["landuse"~"forest|grass|meadow|farmland|residential|industrial|quarry|military"](${bbox});
+                    way["highway"](${bbox});
+                );
+                out geom;
+            `;
+
+            const response = await fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                body: new URLSearchParams({ data: query })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Overpass API returned ${response.status}`);
+            }
+
+            const text = await response.text();
+            try {
+                return JSON.parse(text);
+            } catch (error) {
+                throw new Error('Overpass API did not return JSON. Try a smaller selection or retry later.');
+            }
+        }
+
+        async function fetchElevationGrid(bounds, gridSize) {
+            const points = [];
+            for (let y = 0; y < gridSize; y++) {
+                const tY = y / (gridSize - 1);
+                const lat = bounds.getNorth() + (bounds.getSouth() - bounds.getNorth()) * tY;
+                for (let x = 0; x < gridSize; x++) {
+                    const tX = x / (gridSize - 1);
+                    const lng = bounds.getWest() + (bounds.getEast() - bounds.getWest()) * tX;
+                    points.push({ lat, lng });
+                }
+            }
+
+            const values = [];
+            const batchSize = 100;
+            for (let i = 0; i < points.length; i += batchSize) {
+                const batch = points.slice(i, i + batchSize);
+                const params = new URLSearchParams({
+                    latitude: batch.map(p => p.lat.toFixed(6)).join(','),
+                    longitude: batch.map(p => p.lng.toFixed(6)).join(',')
+                });
+                const response = await fetch(`https://api.open-meteo.com/v1/elevation?${params.toString()}`);
+                if (!response.ok) {
+                    throw new Error(`Elevation API returned ${response.status}`);
+                }
+                const text = await response.text();
+                let json;
+                try {
+                    json = JSON.parse(text);
+                } catch (error) {
+                    throw new Error('Elevation API did not return JSON. Please retry later.');
+                }
+                if (!Array.isArray(json.elevation)) {
+                    throw new Error('Elevation API response did not contain elevation samples.');
+                }
+                values.push(...json.elevation.map(v => Number.isFinite(v) ? v : 0));
+            }
+
+            return { gridSize, values };
+        }
+
+        function buildTerrainFromOsm(bounds, osmFeatures, elevationGrid) {
+            const size = parseInt(document.getElementById('osmMapSize').value);
+            const playerCount = parseInt(document.getElementById('osmPlayerCount').value);
+            const heightScale = parseFloat(document.getElementById('osmHeightScale').value);
+            const waterLevel = 58;
+            const featureMask = rasterizeOsmFeatures(bounds, osmFeatures, OSM_MASK_SIZE);
+            const heightmap = new Array(size * size);
+            const texture = new Array(size * size * 4);
+
+            const minElevation = Math.min(...elevationGrid.values);
+            const maxElevation = Math.max(...elevationGrid.values);
+            const elevationRange = Math.max(1, maxElevation - minElevation);
+
+            for (let y = 0; y < size; y++) {
+                const v = y / (size - 1);
+                for (let x = 0; x < size; x++) {
+                    const u = x / (size - 1);
+                    const mask = sampleFeatureMask(featureMask, u, v);
+                    const elevation = sampleElevation(elevationGrid, u, v);
+                    const normalizedElevation = (elevation - minElevation) / elevationRange;
+                    const localNoise = (noise2D(x * 0.018, y * 0.018) * 7) + (noise2D(x * 0.055, y * 0.055) * 2);
+                    let height = 72 + normalizedElevation * 150 * heightScale + localNoise;
+
+                    if (mask.water > 0) height = Math.min(height, waterLevel - 14 - mask.water * 12);
+                    if (mask.road > 0) height = height * 0.92 + 78 * 0.08;
+                    if (mask.urban > 0) height = height * 0.86 + 82 * 0.14;
+                    if (mask.rock > 0) height += 18 * mask.rock;
+
+                    heightmap[y * size + x] = Math.max(0, Math.min(255, height));
+                }
+            }
+
+            for (let i = 0; i < 2; i++) smoothHeightmap(heightmap, size);
+
+            for (let y = 0; y < size; y++) {
+                const v = y / (size - 1);
+                for (let x = 0; x < size; x++) {
+                    const u = x / (size - 1);
+                    const i = y * size + x;
+                    const mask = sampleFeatureMask(featureMask, u, v);
+                    const height = heightmap[i];
+                    const pixel = i * 4;
+                    const slope = estimateLocalSlope(heightmap, size, x, y);
+                    const color = getOsmTerrainColor(mask, height, waterLevel, slope);
+
+                    texture[pixel] = color[0];
+                    texture[pixel + 1] = color[1];
+                    texture[pixel + 2] = color[2];
+                    texture[pixel + 3] = 255;
+                }
+            }
+
+            const startPositions = generateStartPositions(size, playerCount, heightmap, waterLevel);
+            const terrainAnalysis = analyzeTerrain(heightmap, size, waterLevel);
+            const resources = generateResourceMap(
+                size,
+                heightmap,
+                waterLevel,
+                parseInt(document.getElementById('metalSpots').value),
+                parseInt(document.getElementById('geoSpots').value),
+                playerCount,
+                terrainAnalysis
+            );
+
+            return {
+                heightmap,
+                texture,
+                resources,
+                featureMask,
+                config: {
+                    size,
+                    terrainType: 'osm',
+                    playerCount,
+                    noiseStrength: 0,
+                    heightVariation: 180,
+                    waterLevel,
+                    metalSpots: parseInt(document.getElementById('metalSpots').value),
+                    metalStrength: parseFloat(document.getElementById('metalStrength').value),
+                    geoSpots: parseInt(document.getElementById('geoSpots').value),
+                    startPositions,
+                    osmBounds: {
+                        south: bounds.getSouth(),
+                        west: bounds.getWest(),
+                        north: bounds.getNorth(),
+                        east: bounds.getEast()
+                    }
+                }
+            };
+        }
+
+        function rasterizeOsmFeatures(bounds, osmFeatures, maskSize) {
+            const canvas = document.createElement('canvas');
+            canvas.width = maskSize;
+            canvas.height = maskSize;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, maskSize, maskSize);
+
+            const project = point => {
+                const x = (point.lon - bounds.getWest()) / (bounds.getEast() - bounds.getWest()) * maskSize;
+                const y = (bounds.getNorth() - point.lat) / (bounds.getNorth() - bounds.getSouth()) * maskSize;
+                return { x, y };
+            };
+
+            for (const element of osmFeatures.elements || []) {
+                if (!element.geometry || element.geometry.length < 2) continue;
+                const tags = element.tags || {};
+                const category = getOsmFeatureCategory(tags);
+                if (!category) continue;
+
+                ctx.beginPath();
+                element.geometry.forEach((point, index) => {
+                    const projected = project(point);
+                    if (index === 0) ctx.moveTo(projected.x, projected.y);
+                    else ctx.lineTo(projected.x, projected.y);
+                });
+
+                if (category.kind === 'line') {
+                    ctx.strokeStyle = category.color;
+                    ctx.lineWidth = category.width;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.stroke();
+                } else {
+                    ctx.closePath();
+                    ctx.fillStyle = category.color;
+                    ctx.fill();
+                }
+            }
+
+            return ctx.getImageData(0, 0, maskSize, maskSize);
+        }
+
+        function getOsmFeatureCategory(tags) {
+            if (tags.waterway) return { kind: 'line', color: 'rgba(0,0,255,255)', width: 6 };
+            if (tags.natural === 'water' || tags.natural === 'wetland') return { kind: 'area', color: 'rgba(0,0,255,255)' };
+            if (tags.natural === 'wood' || tags.landuse === 'forest') return { kind: 'area', color: 'rgba(0,255,0,255)' };
+            if (['grass', 'meadow', 'farmland'].includes(tags.landuse)) return { kind: 'area', color: 'rgba(255,255,0,255)' };
+            if (['beach', 'sand'].includes(tags.natural)) return { kind: 'area', color: 'rgba(255,0,255,255)' };
+            if (['bare_rock', 'scree'].includes(tags.natural) || tags.landuse === 'quarry') return { kind: 'area', color: 'rgba(255,0,0,255)' };
+            if (tags.highway) return { kind: 'line', color: 'rgba(0,255,255,255)', width: Math.max(2, tags.highway === 'motorway' ? 7 : 4) };
+            if (['residential', 'industrial', 'military'].includes(tags.landuse)) return { kind: 'area', color: 'rgba(255,128,0,255)' };
+            if (['scrub', 'heath'].includes(tags.natural)) return { kind: 'area', color: 'rgba(0,128,0,255)' };
+            return null;
+        }
+
+        function sampleFeatureMask(mask, u, v) {
+            const x = Math.max(0, Math.min(mask.width - 1, Math.floor(u * (mask.width - 1))));
+            const y = Math.max(0, Math.min(mask.height - 1, Math.floor(v * (mask.height - 1))));
+            const i = (y * mask.width + x) * 4;
+            const d = mask.data;
+            const r = d[i];
+            const g = d[i + 1];
+            const b = d[i + 2];
+
+            return {
+                rock: r > 200 && g < 80 && b < 80 ? 1 : 0,
+                forest: g > 180 && r < 80 && b < 80 ? 1 : 0,
+                water: b > 180 && r < 80 && g < 80 ? 1 : 0,
+                road: g > 180 && b > 180 && r < 80 ? 1 : 0,
+                sand: r > 180 && b > 180 && g < 80 ? 1 : 0,
+                field: r > 180 && g > 180 && b < 80 ? 1 : 0,
+                urban: r > 180 && g > 80 && g < 180 && b < 80 ? 1 : 0
+            };
+        }
+
+        function sampleElevation(grid, u, v) {
+            const max = grid.gridSize - 1;
+            const gx = u * max;
+            const gy = v * max;
+            const x0 = Math.floor(gx);
+            const y0 = Math.floor(gy);
+            const x1 = Math.min(max, x0 + 1);
+            const y1 = Math.min(max, y0 + 1);
+            const tx = gx - x0;
+            const ty = gy - y0;
+            const at = (x, y) => grid.values[y * grid.gridSize + x] || 0;
+            const a = at(x0, y0) * (1 - tx) + at(x1, y0) * tx;
+            const b = at(x0, y1) * (1 - tx) + at(x1, y1) * tx;
+            return a * (1 - ty) + b * ty;
+        }
+
+        function estimateLocalSlope(data, size, x, y) {
+            const left = data[y * size + Math.max(0, x - 1)];
+            const right = data[y * size + Math.min(size - 1, x + 1)];
+            const top = data[Math.max(0, y - 1) * size + x];
+            const bottom = data[Math.min(size - 1, y + 1) * size + x];
+            return Math.sqrt((right - left) ** 2 + (bottom - top) ** 2);
+        }
+
+        function getOsmTerrainColor(mask, height, waterLevel, slope) {
+            if (height < waterLevel || mask.water > 0.1) return [26, 92, 143];
+            if (mask.sand > 0.1 || height < waterLevel + 8) return [194, 178, 125];
+            if (mask.road > 0.1) return [102, 101, 94];
+            if (mask.urban > 0.1) return [112, 104, 96];
+            if (mask.rock > 0.1 || slope > 18) return [117, 113, 105];
+            if (mask.forest > 0.1) return [50, 105, 64];
+            if (mask.field > 0.1) return [128, 139, 78];
+            if (height > waterLevel + 115) return [138, 139, 132];
+            return [74, 134, 82];
+        }
+
+        function drawOsmPreview(featureMask) {
+            const canvas = document.getElementById('osmPreviewCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const temp = document.createElement('canvas');
+            temp.width = featureMask.width;
+            temp.height = featureMask.height;
+            temp.getContext('2d').putImageData(featureMask, 0, 0);
+            ctx.drawImage(temp, 0, 0, canvas.width, canvas.height);
+        }
+
+        function clearCanvas(canvasId) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawHeightmapToCanvas(data, size, canvasId) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 512;
+            const imageData = ctx.createImageData(512, 512);
+            const scale = size / 512;
+
+            for (let y = 0; y < 512; y++) {
+                for (let x = 0; x < 512; x++) {
+                    const sourceX = Math.floor(x * scale);
+                    const sourceY = Math.floor(y * scale);
+                    const height = data[sourceY * size + sourceX];
+                    const index = (y * 512 + x) * 4;
+                    imageData.data[index] = height;
+                    imageData.data[index + 1] = height;
+                    imageData.data[index + 2] = height;
+                    imageData.data[index + 3] = 255;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function drawTextureToCanvas(data, size, canvasId) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 512;
+            const imageData = ctx.createImageData(512, 512);
+            const scale = size / 512;
+
+            for (let y = 0; y < 512; y++) {
+                for (let x = 0; x < 512; x++) {
+                    const sourceX = Math.floor(x * scale);
+                    const sourceY = Math.floor(y * scale);
+                    const sourceIndex = (sourceY * size + sourceX) * 4;
+                    const index = (y * 512 + x) * 4;
+                    imageData.data[index] = data[sourceIndex];
+                    imageData.data[index + 1] = data[sourceIndex + 1];
+                    imageData.data[index + 2] = data[sourceIndex + 2];
+                    imageData.data[index + 3] = 255;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function drawResourceToCanvas(resources, size, startPositions, canvasId) {
+            const sourceCanvas = document.getElementById('resourceCanvas');
+            const targetCanvas = document.getElementById(canvasId);
+            const oldTextureData = textureData;
+            const oldMapConfig = { ...mapConfig };
+            drawResourceMap(resources, size, startPositions);
+            targetCanvas.width = 512;
+            targetCanvas.height = 512;
+            targetCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0);
+            mapConfig = oldMapConfig;
+            textureData = oldTextureData;
+        }
 
         // Update value displays
         function updateValueDisplays() {
