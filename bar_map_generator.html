@@ -616,6 +616,33 @@
             line-height: 1.5;
         }
 
+        .osm-progress {
+            display: none;
+            margin: 12px 0;
+            background: rgba(0, 0, 0, 0.28);
+            border: 1px solid rgba(56, 152, 236, 0.18);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .osm-progress.active {
+            display: block;
+        }
+
+        .osm-progress-bar {
+            width: 0%;
+            height: 8px;
+            background: linear-gradient(90deg, #2570b5, #84c8ee);
+            transition: width 0.25s ease;
+        }
+
+        .osm-progress-label {
+            padding: 7px 9px;
+            font-size: 0.74rem;
+            color: #888;
+            letter-spacing: 0.03em;
+        }
+
         .osm-preview {
             margin-top: 12px;
             text-align: center;
@@ -824,6 +851,10 @@
                         Area limit: keep the selected region reasonably small for the public APIs.
                         <small>Uses OSM/Overpass landscape data and Open-Meteo elevation samples.</small>
                     </div>
+                    <div id="osmProgress" class="osm-progress">
+                        <div id="osmProgressBar" class="osm-progress-bar"></div>
+                        <div id="osmProgressLabel" class="osm-progress-label">Waiting...</div>
+                    </div>
 
                     <button class="primary" onclick="generateOsmMap()">Generate from Selection</button>
                     <button onclick="clearOsmSelection()">Clear Selection</button>
@@ -931,6 +962,7 @@
             osmSelectedBounds = null;
             document.getElementById('osmCoords').textContent = 'Draw a rectangle on the map.';
             setOsmStatus('Area cleared.', '');
+            hideOsmProgress();
             clearCanvas('osmPreviewCanvas');
         }
 
@@ -961,6 +993,22 @@
             status.innerHTML = message;
         }
 
+        function updateOsmProgress(percent, label) {
+            const progress = document.getElementById('osmProgress');
+            const bar = document.getElementById('osmProgressBar');
+            const labelEl = document.getElementById('osmProgressLabel');
+            progress.classList.add('active');
+            bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+            labelEl.textContent = label;
+        }
+
+        function hideOsmProgress() {
+            const progress = document.getElementById('osmProgress');
+            const bar = document.getElementById('osmProgressBar');
+            progress.classList.remove('active');
+            bar.style.width = '0%';
+        }
+
         function estimateBoundsAreaKm2(bounds) {
             const latKm = Math.abs(bounds.getNorth() - bounds.getSouth()) * 111.32;
             const midLat = (bounds.getNorth() + bounds.getSouth()) / 2;
@@ -983,13 +1031,19 @@
             buttons.forEach(btn => btn.disabled = true);
 
             try {
+                updateOsmProgress(5, 'Preparing OSM request...');
                 setOsmStatus('Loading OpenStreetMap features...', 'loading');
                 const osmFeatures = await fetchOsmFeatures(osmSelectedBounds);
 
                 const elevationGridSize = getElevationGridSize(areaKm2);
+                updateOsmProgress(18, 'OSM features loaded. Starting throttled elevation batches...');
                 setOsmStatus(`Loaded ${osmFeatures.elements.length} OSM elements. Loading ${elevationGridSize * elevationGridSize} elevation samples...`, 'loading');
-                const elevationGrid = await fetchElevationGrid(osmSelectedBounds, elevationGridSize);
+                const elevationGrid = await fetchElevationGrid(osmSelectedBounds, elevationGridSize, (loaded, total, batchIndex, batchCount) => {
+                    const percent = 18 + (loaded / total) * 58;
+                    updateOsmProgress(percent, `Elevation batch ${batchIndex}/${batchCount}: ${loaded}/${total} samples`);
+                });
 
+                updateOsmProgress(82, 'Building BAR heightmap and texture...');
                 setOsmStatus('Projecting OSM and elevation data into BAR terrain...', 'loading');
                 const generated = buildTerrainFromOsm(osmSelectedBounds, osmFeatures, elevationGrid);
 
@@ -1003,12 +1057,15 @@
                 drawTextureToCanvas(textureData, mapConfig.size, 'osmTextureCanvas');
                 drawResourceToCanvas(resourceData, mapConfig.size, mapConfig.startPositions, 'osmResourceCanvas');
 
+                updateOsmProgress(100, 'Done');
                 setOsmStatus(
                     `OSM map generated. Elevation samples: ${elevationGrid.values.length}, OSM elements: ${osmFeatures.elements.length}.${elevationGrid.synthetic ? ' Elevation API was rate-limited, using generated relief fallback.' : ''}`,
                     'success'
                 );
+                setTimeout(hideOsmProgress, 1200);
             } catch (error) {
                 console.error('OSM generation failed:', error);
+                hideOsmProgress();
                 setOsmStatus(`OSM generation failed: ${error.message}`, 'error');
                 alert('OSM generation failed: ' + error.message);
             } finally {
@@ -1057,7 +1114,7 @@
             }
         }
 
-        async function fetchElevationGrid(bounds, gridSize) {
+        async function fetchElevationGrid(bounds, gridSize, onProgress = null) {
             const points = [];
             for (let y = 0; y < gridSize; y++) {
                 const tY = y / (gridSize - 1);
@@ -1070,9 +1127,11 @@
             }
 
             const values = [];
-            const batchSize = 50;
+            const batchSize = 25;
+            const batchCount = Math.ceil(points.length / batchSize);
             for (let i = 0; i < points.length; i += batchSize) {
                 const batch = points.slice(i, i + batchSize);
+                const batchIndex = Math.floor(i / batchSize) + 1;
                 const params = new URLSearchParams({
                     latitude: batch.map(p => p.lat.toFixed(6)).join(','),
                     longitude: batch.map(p => p.lng.toFixed(6)).join(',')
@@ -1080,6 +1139,8 @@
                 const response = await fetch(`https://api.open-meteo.com/v1/elevation?${params.toString()}`);
                 if (!response.ok) {
                     if (response.status === 429) {
+                        updateOsmProgress(76, 'Elevation API is rate-limited. Switching to generated relief...');
+                        await wait(900);
                         return createSyntheticElevationGrid(bounds, gridSize);
                     }
                     throw new Error(`Elevation API returned ${response.status}`);
@@ -1095,8 +1156,11 @@
                     throw new Error('Elevation API response did not contain elevation samples.');
                 }
                 values.push(...json.elevation.map(v => Number.isFinite(v) ? v : 0));
+                if (onProgress) {
+                    onProgress(values.length, points.length, batchIndex, batchCount);
+                }
                 if (i + batchSize < points.length) {
-                    await wait(250);
+                    await wait(700);
                 }
             }
 
@@ -1104,9 +1168,9 @@
         }
 
         function getElevationGridSize(areaKm2) {
-            if (areaKm2 > 45) return 12;
-            if (areaKm2 > 20) return 16;
-            return 20;
+            if (areaKm2 > 45) return 10;
+            if (areaKm2 > 20) return 14;
+            return 18;
         }
 
         function wait(ms) {
