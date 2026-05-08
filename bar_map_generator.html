@@ -3471,23 +3471,7 @@ https://github.com/beyond-all-reason/bar-map-generator
             }
 
             try {
-                // Attempt canvas to blob conversion
-                const blob = await new Promise((resolve, reject) => {
-                    try {
-                        canvas.toBlob(
-                            blob => {
-                                if (blob) {
-                                    resolve(blob);
-                                } else {
-                                    reject(new Error('toBlob returned null'));
-                                }
-                            },
-                            mimeType
-                        );
-                    } catch (error) {
-                        reject(error);
-                    }
-                });
+                const blob = await canvasToBlob(canvas, mimeType);
 
                 // Verify the blob was created successfully
                 if (!blob || blob.size === 0) {
@@ -4488,39 +4472,50 @@ Generator: BAR Map Generator v1.0
 `;
         }
 
-        function canvasToBlob(canvas, type = 'image/png') {
-            return new Promise(resolve => {
-                // For BMP files, we need to ensure RGB format (no alpha)
-                if (type === 'image/bmp') {
-                    // Create a new canvas with RGB-only context
-                    const rgbCanvas = document.createElement('canvas');
-                    rgbCanvas.width = canvas.width;
-                    rgbCanvas.height = canvas.height;
-                    const rgbCtx = rgbCanvas.getContext('2d', { alpha: false });
+        function canvasToBmpBlob(canvas) {
+            const w = canvas.width, h = canvas.height;
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const px = imageData.data;
 
-                    // Fill with black background (for heightmaps/metal) or white (for textures)
-                    rgbCtx.fillStyle = 'black';
-                    rgbCtx.fillRect(0, 0, rgbCanvas.width, rgbCanvas.height);
+            const rowBytes = w * 3;
+            const rowPadding = (4 - (rowBytes % 4)) % 4;
+            const stride = rowBytes + rowPadding;
+            const pixelDataSize = stride * h;
+            const fileSize = 54 + pixelDataSize;
 
-                    // Set composite operation to overwrite alpha
-                    rgbCtx.globalCompositeOperation = 'source-over';
+            const buf = new ArrayBuffer(fileSize);
+            const view = new DataView(buf);
 
-                    // Draw original canvas on top
-                    rgbCtx.drawImage(canvas, 0, 0);
+            view.setUint8(0, 0x42); view.setUint8(1, 0x4D);
+            view.setUint32(2, fileSize, true);
+            view.setUint32(10, 54, true);
+            view.setUint32(14, 40, true);
+            view.setInt32(18, w, true);
+            view.setInt32(22, h, true);
+            view.setUint16(26, 1, true);
+            view.setUint16(28, 24, true);
+            view.setUint32(34, pixelDataSize, true);
 
-                    // Force RGB by creating image data and removing alpha
-                    const imageData = rgbCtx.getImageData(0, 0, rgbCanvas.width, rgbCanvas.height);
-                    for (let i = 3; i < imageData.data.length; i += 4) {
-                        imageData.data[i] = 255; // Set alpha to 255 (opaque)
-                    }
-                    rgbCtx.putImageData(imageData, 0, 0);
-
-                    // Convert to blob as PNG (browsers don't support BMP creation well)
-                    rgbCanvas.toBlob(resolve, 'image/png');
-                } else {
-                    canvas.toBlob(resolve, type);
+            let offset = 54;
+            for (let y = h - 1; y >= 0; y--) {
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4;
+                    view.setUint8(offset++, px[i + 2]);
+                    view.setUint8(offset++, px[i + 1]);
+                    view.setUint8(offset++, px[i]);
                 }
-            });
+                for (let p = 0; p < rowPadding; p++) view.setUint8(offset++, 0);
+            }
+
+            return new Blob([buf], { type: 'image/bmp' });
+        }
+
+        function canvasToBlob(canvas, type = 'image/png') {
+            if (type === 'image/bmp') {
+                return Promise.resolve(canvasToBmpBlob(canvas));
+            }
+            return new Promise(resolve => canvas.toBlob(resolve, type));
         }
 
         function generateReadme(mapName) {
