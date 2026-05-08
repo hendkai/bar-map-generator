@@ -1011,6 +1011,11 @@
             labelEl.textContent = label;
         }
 
+        async function paintOsmProgress(percent, label) {
+            updateOsmProgress(percent, label);
+            await wait(40);
+        }
+
         function hideOsmProgress() {
             const progress = document.getElementById('osmProgress');
             const bar = document.getElementById('osmProgressBar');
@@ -1040,38 +1045,39 @@
             buttons.forEach(btn => btn.disabled = true);
 
             try {
-                updateOsmProgress(5, 'Preparing OSM request...');
+                await paintOsmProgress(5, 'Preparing OSM request...');
                 setOsmStatus('Loading OpenStreetMap features...', 'loading');
                 const osmFeatures = await fetchOsmFeatures(osmSelectedBounds);
 
                 const elevationGridSize = getElevationGridSize(areaKm2);
-                updateOsmProgress(18, 'OSM features loaded. Starting throttled elevation batches...');
+                await paintOsmProgress(18, 'OSM features loaded. Starting throttled elevation batches...');
                 setOsmStatus(`Loaded ${osmFeatures.elements.length} OSM elements. Loading ${elevationGridSize * elevationGridSize} elevation samples...`, 'loading');
                 const elevationGrid = await fetchElevationGrid(osmSelectedBounds, elevationGridSize, (loaded, total, batchIndex, batchCount) => {
                     const percent = 18 + (loaded / total) * 58;
                     updateOsmProgress(percent, `Elevation batch ${batchIndex}/${batchCount}: ${loaded}/${total} samples`);
                 });
 
-                updateOsmProgress(82, 'Building BAR heightmap and texture...');
+                await paintOsmProgress(78, 'Building BAR heightmap and texture...');
                 setOsmStatus('Projecting OSM and elevation data into BAR terrain...', 'loading');
-                const generated = buildTerrainFromOsm(osmSelectedBounds, osmFeatures, elevationGrid);
+                const generated = await buildTerrainFromOsm(osmSelectedBounds, osmFeatures, elevationGrid, paintOsmProgress);
 
                 heightmapData = generated.heightmap;
                 textureData = generated.texture;
                 resourceData = generated.resources;
                 mapConfig = generated.config;
 
+                await paintOsmProgress(97, 'Drawing previews...');
                 drawOsmPreview(generated.featureMask);
                 drawHeightmapToCanvas(heightmapData, mapConfig.size, 'osmHeightmapCanvas');
                 drawTextureToCanvas(textureData, mapConfig.size, 'osmTextureCanvas');
                 drawResourceToCanvas(resourceData, mapConfig.size, mapConfig.startPositions, 'osmResourceCanvas');
 
-                updateOsmProgress(100, 'Done');
+                await paintOsmProgress(100, 'Done');
                 setOsmStatus(
                     `OSM map generated. Elevation samples: ${elevationGrid.values.length}, OSM elements: ${osmFeatures.elements.length}.${elevationGrid.synthetic ? ' Elevation API was rate-limited, using generated relief fallback.' : ''}`,
                     'success'
                 );
-                setTimeout(hideOsmProgress, 1200);
+                setTimeout(hideOsmProgress, 2500);
             } catch (error) {
                 console.error('OSM generation failed:', error);
                 hideOsmProgress();
@@ -1206,14 +1212,16 @@
             return { gridSize, values, synthetic: true };
         }
 
-        function buildTerrainFromOsm(bounds, osmFeatures, elevationGrid) {
+        async function buildTerrainFromOsm(bounds, osmFeatures, elevationGrid, onProgress = null) {
             const size = parseInt(document.getElementById('osmMapSize').value);
             const playerCount = parseInt(document.getElementById('osmPlayerCount').value);
             const heightScale = parseFloat(document.getElementById('osmHeightScale').value);
             const waterLevel = 58;
+            if (onProgress) await onProgress(79, 'Rasterizing OSM landscape features...');
             const featureMask = rasterizeOsmFeatures(bounds, osmFeatures, OSM_MASK_SIZE);
             const heightmap = new Array(size * size);
             const texture = new Array(size * size * 4);
+            const rowYieldStep = size >= 2048 ? 64 : 96;
 
             const minElevation = Math.min(...elevationGrid.values);
             const maxElevation = Math.max(...elevationGrid.values);
@@ -1236,9 +1244,15 @@
 
                     heightmap[y * size + x] = Math.max(0, Math.min(255, height));
                 }
+                if (onProgress && (y % rowYieldStep === 0 || y === size - 1)) {
+                    await onProgress(80 + (y / (size - 1)) * 7, `Building heightmap row ${y + 1}/${size}...`);
+                }
             }
 
-            for (let i = 0; i < 2; i++) smoothHeightmap(heightmap, size);
+            for (let i = 0; i < 2; i++) {
+                if (onProgress) await onProgress(88 + i, `Smoothing terrain pass ${i + 1}/2...`);
+                smoothHeightmap(heightmap, size);
+            }
 
             for (let y = 0; y < size; y++) {
                 const v = y / (size - 1);
@@ -1256,10 +1270,16 @@
                     texture[pixel + 2] = color[2];
                     texture[pixel + 3] = 255;
                 }
+                if (onProgress && (y % rowYieldStep === 0 || y === size - 1)) {
+                    await onProgress(90 + (y / (size - 1)) * 4, `Painting texture row ${y + 1}/${size}...`);
+                }
             }
 
+            if (onProgress) await onProgress(95, 'Finding start positions...');
             const startPositions = generateStartPositions(size, playerCount, heightmap, waterLevel);
+            if (onProgress) await onProgress(96, 'Analyzing terrain for resources...');
             const terrainAnalysis = analyzeTerrain(heightmap, size, waterLevel);
+            if (onProgress) await onProgress(97, 'Placing metal and geothermal spots...');
             const resources = generateResourceMap(
                 size,
                 heightmap,
