@@ -40,6 +40,7 @@ While the map generation and asset creation works, the automatic compilation sys
 
 1. **Generation**: Creates procedural terrain using noise algorithms
    - OSM mode combines OpenStreetMap features with sampled elevation data
+   - If the public elevation API is rate-limited, OSM mode falls back to generated relief so the map can still be previewed and exported
 2. **Asset Creation**: Generates all required BAR map files with correct dimensions
 3. **Package Creation**: Bundles everything into a self-compiling ZIP package
 4. **Compilation**: Uses PyMapConv to create the final .sd7 map file

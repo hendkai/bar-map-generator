@@ -986,8 +986,9 @@
                 setOsmStatus('Loading OpenStreetMap features...', 'loading');
                 const osmFeatures = await fetchOsmFeatures(osmSelectedBounds);
 
-                setOsmStatus(`Loaded ${osmFeatures.elements.length} OSM elements. Loading elevation samples...`, 'loading');
-                const elevationGrid = await fetchElevationGrid(osmSelectedBounds, 32);
+                const elevationGridSize = getElevationGridSize(areaKm2);
+                setOsmStatus(`Loaded ${osmFeatures.elements.length} OSM elements. Loading ${elevationGridSize * elevationGridSize} elevation samples...`, 'loading');
+                const elevationGrid = await fetchElevationGrid(osmSelectedBounds, elevationGridSize);
 
                 setOsmStatus('Projecting OSM and elevation data into BAR terrain...', 'loading');
                 const generated = buildTerrainFromOsm(osmSelectedBounds, osmFeatures, elevationGrid);
@@ -1003,7 +1004,7 @@
                 drawResourceToCanvas(resourceData, mapConfig.size, mapConfig.startPositions, 'osmResourceCanvas');
 
                 setOsmStatus(
-                    `OSM map generated. Elevation samples: ${elevationGrid.values.length}, OSM elements: ${osmFeatures.elements.length}.`,
+                    `OSM map generated. Elevation samples: ${elevationGrid.values.length}, OSM elements: ${osmFeatures.elements.length}.${elevationGrid.synthetic ? ' Elevation API was rate-limited, using generated relief fallback.' : ''}`,
                     'success'
                 );
             } catch (error) {
@@ -1069,7 +1070,7 @@
             }
 
             const values = [];
-            const batchSize = 100;
+            const batchSize = 50;
             for (let i = 0; i < points.length; i += batchSize) {
                 const batch = points.slice(i, i + batchSize);
                 const params = new URLSearchParams({
@@ -1078,6 +1079,9 @@
                 });
                 const response = await fetch(`https://api.open-meteo.com/v1/elevation?${params.toString()}`);
                 if (!response.ok) {
+                    if (response.status === 429) {
+                        return createSyntheticElevationGrid(bounds, gridSize);
+                    }
                     throw new Error(`Elevation API returned ${response.status}`);
                 }
                 const text = await response.text();
@@ -1091,9 +1095,42 @@
                     throw new Error('Elevation API response did not contain elevation samples.');
                 }
                 values.push(...json.elevation.map(v => Number.isFinite(v) ? v : 0));
+                if (i + batchSize < points.length) {
+                    await wait(250);
+                }
             }
 
-            return { gridSize, values };
+            return { gridSize, values, synthetic: false };
+        }
+
+        function getElevationGridSize(areaKm2) {
+            if (areaKm2 > 45) return 12;
+            if (areaKm2 > 20) return 16;
+            return 20;
+        }
+
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function createSyntheticElevationGrid(bounds, gridSize) {
+            const values = [];
+            const midLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+            const midLng = (bounds.getEast() + bounds.getWest()) / 2;
+            const seed = Math.floor(Math.abs(midLat * 1000 + midLng * 1000));
+
+            for (let y = 0; y < gridSize; y++) {
+                const v = y / (gridSize - 1);
+                for (let x = 0; x < gridSize; x++) {
+                    const u = x / (gridSize - 1);
+                    const ridge = Math.sin((u * 1.7 + v * 0.8 + seed * 0.001) * Math.PI) * 18;
+                    const rolling = noise2D(u * 7 + seed, v * 7 - seed) * 24;
+                    const detail = noise2D(u * 21 - seed, v * 21 + seed) * 8;
+                    values.push(90 + ridge + rolling + detail);
+                }
+            }
+
+            return { gridSize, values, synthetic: true };
         }
 
         function buildTerrainFromOsm(bounds, osmFeatures, elevationGrid) {
