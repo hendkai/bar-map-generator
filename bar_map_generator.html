@@ -899,6 +899,14 @@
         let osmDrawLayer = null;
         let osmSelectedBounds = null;
         const OSM_MASK_SIZE = 512;
+        const OSM_SELECTION_STYLE = {
+            color: '#ff3b30',
+            weight: 4,
+            opacity: 1,
+            fillColor: '#ff3b30',
+            fillOpacity: 0.14,
+            dashArray: '6, 4'
+        };
 
         function switchMode(mode) {
             document.querySelectorAll('.mode-tab').forEach(tab => tab.classList.remove('active'));
@@ -934,7 +942,7 @@
                     marker: false,
                     circlemarker: false,
                     rectangle: {
-                        shapeOptions: { color: '#3898ec', weight: 2 }
+                        shapeOptions: OSM_SELECTION_STYLE
                     }
                 },
                 edit: { featureGroup: osmDrawLayer }
@@ -943,6 +951,7 @@
 
             osmMap.on(L.Draw.Event.CREATED, function (event) {
                 osmDrawLayer.clearLayers();
+                event.layer.setStyle(OSM_SELECTION_STYLE);
                 osmDrawLayer.addLayer(event.layer);
                 osmSelectedBounds = event.layer.getBounds();
                 updateOsmSelectionDisplay();
