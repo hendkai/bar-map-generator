@@ -13,7 +13,7 @@ import os
 import random
 import shutil
 import subprocess
-import tarfile
+import sys
 import tempfile
 import threading
 import time
@@ -30,7 +30,8 @@ OVERPASS_ENDPOINTS = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 )
-PYMAPCONV_LINUX_URL = "https://github.com/Beherith/springrts_smf_compiler/releases/download/v0.6.3/pymapconv.v0.6.3.linux-amd64.tar.gz"
+PYMAPCONV_SOURCE_URL = "https://raw.githubusercontent.com/Beherith/springrts_smf_compiler/v0.6.3/src/pymapconv.py"
+PYMAPCONV_VERSION_URL = "https://raw.githubusercontent.com/Beherith/springrts_smf_compiler/v0.6.3/src/version.py"
 PREVIEW_WIDTH = 1200
 PREVIEW_HEIGHT = 720
 
@@ -881,10 +882,13 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     pymapconv = ensure_pymapconv(tools_dir, status)
-    prepare_pymapconv_runtime(root)
+    prepare_pymapconv_runtime(root, tools_dir)
 
     full_cmd = [
         str(pymapconv),
+        "-u",
+        "-q",
+        "1",
         "-a",
         str(root / "assets" / "heightmap.bmp"),
         "-m",
@@ -908,16 +912,25 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     status(92, "Running PyMapConv...")
     result = run_pymapconv_command(root, full_cmd)
     combined_output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
+    if pymapconv_source_cli_succeeded(result, output_smf, combined_output):
+        result = subprocess.CompletedProcess(result.args, 0, result.stdout, result.stderr)
+
     if result.returncode != 0 and is_texture_compression_failure(combined_output):
-        status(94, "Texture compression failed. Retrying PyMapConv with skip-texture fallback...")
-        prepare_pymapconv_runtime(root)
+        status(94, "Texture compression failed. Retrying PyMapConv with Linux single-thread fallback...")
+        prepare_pymapconv_runtime(root, tools_dir)
         fallback_cmd = [
             str(pymapconv),
+            "-u",
+            "-q",
+            "1",
             "-a",
             str(root / "assets" / "heightmap.bmp"),
             "-m",
             str(root / "assets" / "metalmap.bmp"),
-            "-s",
+            "-t",
+            str(root / "assets" / "texture.bmp"),
+            "-p",
+            str(root / "assets" / "minimap.png"),
             "-o",
             str(output_smf),
         ]
@@ -930,6 +943,9 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     combined_output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
     if combined_output:
         status(94, f"PyMapConv output written to {log_path}\n{combined_output[-1600:]}")
+    if pymapconv_source_cli_succeeded(result, output_smf, combined_output):
+        result = subprocess.CompletedProcess(result.args, 0, result.stdout, result.stderr)
+
     if result.returncode != 0:
         details = combined_output[-2200:] or "No stdout/stderr was produced."
         raise RuntimeError(f"PyMapConv failed with exit code {result.returncode}. Full log: {log_path}\n{details}")
@@ -965,40 +981,49 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
 
 
 def ensure_pymapconv(tools_dir: Path, status) -> Path:
-    existing = next(tools_dir.rglob("pymapconv"), None)
-    if existing and existing.is_file():
+    existing = tools_dir / "pymapconv-source"
+    if existing.exists():
         existing.chmod(existing.stat().st_mode | 0o755)
         return existing
 
-    archive_path = tools_dir / "pymapconv-linux-amd64.tar.gz"
-    status(91, "Downloading PyMapConv...")
-    with requests.get(PYMAPCONV_LINUX_URL, stream=True, timeout=120) as response:
-        response.raise_for_status()
-        with archive_path.open("wb") as handle:
-            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    handle.write(chunk)
+    status(91, "Downloading PyMapConv source runner...")
+    source_dir = tools_dir / "pymapconv_source"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    download_text(PYMAPCONV_SOURCE_URL, source_dir / "pymapconv.py")
+    download_text(PYMAPCONV_VERSION_URL, source_dir / "version.py")
+    (source_dir / "png.py").write_text(
+        """class Reader:
+    def __init__(self, *args, **kwargs):
+        raise RuntimeError("PNG heightmaps are not supported by the embedded PyMapConv runner.")
 
-    with tarfile.open(archive_path, "r:gz") as tar:
-        tar.extractall(tools_dir)
+class Writer:
+    def __init__(self, *args, **kwargs):
+        raise RuntimeError("PNG writing is not supported by the embedded PyMapConv runner.")
+""",
+        encoding="utf-8",
+    )
+    python = shutil.which("python3") or sys.executable
+    existing.write_text(
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+exec "{python}" "{source_dir / 'pymapconv.py'}" "$@"
+""",
+        encoding="utf-8",
+    )
+    existing.chmod(0o755)
+    return existing
 
-    executable = next(tools_dir.rglob("pymapconv"), None)
-    if not executable:
-        raise RuntimeError("PyMapConv download completed, but executable was not found.")
-    executable.chmod(executable.stat().st_mode | 0o755)
-    return executable
+
+def download_text(url: str, path: Path) -> None:
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    path.write_text(response.text, encoding="utf-8")
 
 
-def prepare_pymapconv_runtime(root: Path) -> None:
+def prepare_pymapconv_runtime(root: Path, tools_dir: Path) -> None:
     temp_dir = root / "temp"
     temp_dir.mkdir(exist_ok=True)
-    # PyMapConv writes intermediate tiles to relative temp/threadN paths.
-    for idx in range(0, 17):
-        thread_dir = temp_dir / f"thread{idx}"
-        thread_dir.mkdir(parents=True, exist_ok=True)
-        for tile_idx in range(0, 512):
-            (thread_dir / f"temp{tile_idx}.BMP").touch(exist_ok=True)
-            (thread_dir / f"temp{tile_idx}.TIFF").touch(exist_ok=True)
+    write_compressonator_wrapper(tools_dir)
 
     resources_dir = root / "resources"
     resources_dir.mkdir(exist_ok=True)
@@ -1007,8 +1032,49 @@ def prepare_pymapconv_runtime(root: Path) -> None:
         Image.new("RGB", (64, 64), (128, 128, 128)).save(geovent)
 
 
+def write_compressonator_wrapper(tools_dir: Path) -> None:
+    tools_dir.mkdir(parents=True, exist_ok=True)
+    wrapper = tools_dir / "CompressonatorCLI"
+    wrapper.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [ "$#" -lt 2 ]; then
+  echo "CompressonatorCLI wrapper expected input and output paths" >&2
+  exit 2
+fi
+input="${@: -2:1}"
+output="${@: -1}"
+if command -v magick >/dev/null 2>&1; then
+  magick "$input" -flip -define dds:compression=dxt1 -define dds:fast-mipmaps=false "$output"
+elif command -v convert >/dev/null 2>&1; then
+  convert "$input" -flip -define dds:compression=dxt1 -define dds:fast-mipmaps=false "$output"
+else
+  echo "ImageMagick magick/convert is required for DDS compression" >&2
+  exit 127
+fi
+""",
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+
+
 def run_pymapconv_command(root: Path, cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=1800)
+    env = os.environ.copy()
+    env["PATH"] = f"{root / 'tools'}:{env.get('PATH', '')}"
+    # The PyInstaller build can leak bundled libraries into child shell calls on
+    # NixOS, which breaks `/bin/sh` before ImageMagick can create DDS files.
+    env.pop("LD_LIBRARY_PATH", None)
+    env.pop("LD_PRELOAD", None)
+    return subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=1800, env=env)
+
+
+def pymapconv_source_cli_succeeded(result: subprocess.CompletedProcess[str], output_smf: Path, output: str) -> bool:
+    return (
+        result.returncode != 0
+        and output_smf.exists()
+        and output_smf.with_suffix(".smt").exists()
+        and "All Done" in output
+    )
 
 
 def is_texture_compression_failure(output: str) -> bool:
