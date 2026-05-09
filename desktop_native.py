@@ -23,7 +23,7 @@ from tkinter import END, filedialog, messagebox, ttk
 import tkinter as tk
 
 import requests
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageTk
 
 
 OVERPASS_ENDPOINTS = (
@@ -40,14 +40,20 @@ class NativeExporterApp:
         self.root.geometry("920x720")
         self.root.minsize(820, 620)
         self.worker: threading.Thread | None = None
+        self.preview_image = None
+        self.preview_bounds = None
+        self.preview_rect = None
+        self.preview_drag = None
 
-        self.map_name = tk.StringVar(value="native_osm_map")
-        self.location = tk.StringVar(value="Berlin")
+        self.mode = tk.StringVar(value="OSM location")
+        self.map_name = tk.StringVar(value="struempfelbach_native")
+        self.location = tk.StringVar(value="Strümpfelbach")
         self.map_size = tk.StringVar(value="1024")
         self.players = tk.StringVar(value="4")
         self.area_km = tk.StringVar(value="4.0")
         self.height_scale = tk.StringVar(value="1.0")
         self.output_path = tk.StringVar(value=str(Path.home() / "BAR_native_map.sd7"))
+        self.bar_maps_path = tk.StringVar(value=str(detect_bar_maps_dir()))
         self.status = tk.StringVar(value="Ready.")
         self.progress = tk.DoubleVar(value=0)
 
@@ -67,8 +73,35 @@ class NativeExporterApp:
         style.map("TButton", background=[("active", "#1e4d75")])
         style.configure("Accent.TButton", background="#b88a22", foreground="#05070a", font=("Sans", 10, "bold"))
         style.map("Accent.TButton", background=[("active", "#d9a62b")])
-        style.configure("TEntry", fieldbackground="#131b24", foreground="#e8f4ff", insertcolor="#e8f4ff")
-        style.configure("TCombobox", fieldbackground="#131b24", foreground="#e8f4ff")
+        style.configure(
+            "TEntry",
+            fieldbackground="#131b24",
+            background="#131b24",
+            foreground="#e8f4ff",
+            insertcolor="#e8f4ff",
+            selectbackground="#265b86",
+            selectforeground="#ffffff",
+        )
+        style.map(
+            "TEntry",
+            fieldbackground=[("readonly", "#131b24"), ("disabled", "#0f151c"), ("focus", "#162331")],
+            foreground=[("readonly", "#e8f4ff"), ("disabled", "#6f7f8c")],
+        )
+        style.configure(
+            "TCombobox",
+            fieldbackground="#131b24",
+            background="#131b24",
+            foreground="#e8f4ff",
+            arrowcolor="#e8f4ff",
+            selectbackground="#265b86",
+            selectforeground="#ffffff",
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", "#131b24"), ("disabled", "#0f151c"), ("focus", "#162331")],
+            background=[("readonly", "#131b24"), ("active", "#1e4d75")],
+            foreground=[("readonly", "#e8f4ff"), ("disabled", "#6f7f8c")],
+        )
         style.configure("Horizontal.TProgressbar", troughcolor="#101820", background="#65b7ff")
 
     def _build_ui(self) -> None:
@@ -87,6 +120,13 @@ class NativeExporterApp:
         grid.columnconfigure(1, weight=1)
 
         row = 0
+        self._row(
+            grid,
+            row,
+            "Generation mode",
+            ttk.Combobox(grid, textvariable=self.mode, values=("OSM location", "Random procedural"), state="readonly"),
+        )
+        row += 1
         self._row(grid, row, "Map name", ttk.Entry(grid, textvariable=self.map_name))
         row += 1
         self._row(grid, row, "OSM place", ttk.Entry(grid, textvariable=self.location))
@@ -97,14 +137,24 @@ class NativeExporterApp:
             grid,
             row,
             "BAR size",
-            ttk.Combobox(grid, textvariable=self.map_size, values=("512", "1024", "2048"), state="readonly"),
+            ttk.Combobox(
+                grid,
+                textvariable=self.map_size,
+                values=("512", "1024", "2048", "3072", "4096"),
+                state="readonly",
+            ),
         )
         row += 1
         self._row(
             grid,
             row,
             "Players",
-            ttk.Combobox(grid, textvariable=self.players, values=("2", "4", "6", "8"), state="readonly"),
+            ttk.Combobox(
+                grid,
+                textvariable=self.players,
+                values=("2", "4", "6", "8", "10", "12", "14", "16"),
+                state="readonly",
+            ),
         )
         row += 1
         self._row(
@@ -120,12 +170,20 @@ class NativeExporterApp:
         ttk.Entry(output_frame, textvariable=self.output_path).grid(row=0, column=0, sticky="ew", padx=(0, 8))
         ttk.Button(output_frame, text="Browse", command=self._choose_output).grid(row=0, column=1)
         self._row(grid, row, "Output .sd7", output_frame)
+        row += 1
+
+        bar_frame = ttk.Frame(grid)
+        bar_frame.columnconfigure(0, weight=1)
+        ttk.Entry(bar_frame, textvariable=self.bar_maps_path).grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        ttk.Button(bar_frame, text="Browse", command=self._choose_bar_folder).grid(row=0, column=1)
+        self._row(grid, row, "BAR maps folder", bar_frame)
 
         note = ttk.Label(
             shell,
             text=(
                 "This native exporter generates the source assets, runs PyMapConv, and packages a BAR-loadable .sd7. "
-                "2048 maps can take several minutes and use several GB of temporary disk space."
+                "Large maps can take several minutes and use several GB of temporary disk space. "
+                "The finished map is copied into the detected BAR maps folder automatically."
             ),
             style="Sub.TLabel",
             wraplength=820,
@@ -137,8 +195,18 @@ class NativeExporterApp:
 
         actions = ttk.Frame(shell)
         actions.pack(fill="x")
+        ttk.Button(actions, text="Load OSM Preview", command=self._load_preview).pack(side="left", padx=(0, 10))
         ttk.Button(actions, text="Generate Playable .sd7", style="Accent.TButton", command=self._start_export).pack(side="left")
         ttk.Button(actions, text="Open Output Folder", command=self._open_output_folder).pack(side="left", padx=10)
+
+        preview_frame = ttk.Frame(shell)
+        preview_frame.pack(fill="x", pady=(16, 0))
+        ttk.Label(preview_frame, text="OSM selection preview", style="Sub.TLabel").pack(anchor="w")
+        self.preview_canvas = tk.Canvas(preview_frame, width=420, height=260, bg="#111923", highlightthickness=1, highlightbackground="#314455")
+        self.preview_canvas.pack(anchor="w", pady=(6, 0))
+        self.preview_canvas.bind("<ButtonPress-1>", self._preview_press)
+        self.preview_canvas.bind("<B1-Motion>", self._preview_drag_motion)
+        self.preview_canvas.bind("<ButtonRelease-1>", self._preview_release)
 
         log_frame = ttk.Frame(shell)
         log_frame.pack(fill="both", expand=True, pady=(18, 0))
@@ -158,6 +226,11 @@ class NativeExporterApp:
         )
         if filename:
             self.output_path.set(filename)
+
+    def _choose_bar_folder(self) -> None:
+        folder = filedialog.askdirectory(title="Select BAR maps folder", initialdir=self.bar_maps_path.get())
+        if folder:
+            self.bar_maps_path.set(folder)
 
     def _open_output_folder(self) -> None:
         folder = Path(self.output_path.get()).expanduser().parent
@@ -189,6 +262,9 @@ class NativeExporterApp:
                 area_km=float(self.area_km.get()),
                 height_scale=float(self.height_scale.get()),
                 output=Path(self.output_path.get()).expanduser(),
+                mode=self.mode.get(),
+                selection_bounds=self.get_selection_bounds(),
+                bar_maps_dir=Path(self.bar_maps_path.get()).expanduser(),
             )
             export_native_package(config, self._set_status)
             self._set_status(100, f"Done: {config.output}")
@@ -196,6 +272,76 @@ class NativeExporterApp:
         except Exception as exc:
             self._set_status(0, f"Export failed: {exc}")
             self.root.after(0, messagebox.showerror, "Export failed", str(exc))
+
+    def _load_preview(self) -> None:
+        def worker() -> None:
+            try:
+                bounds = resolve_bounds(self.location.get().strip(), float(self.area_km.get()), self._set_status)
+                image, image_bounds = load_osm_preview_image(bounds)
+                photo = ImageTk.PhotoImage(image)
+                self.root.after(0, self._show_preview, photo, image_bounds)
+            except Exception as exc:
+                self._set_status(0, f"Preview failed: {exc}")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_preview(self, photo, image_bounds) -> None:
+        self.preview_image = photo
+        self.preview_bounds = image_bounds
+        self.preview_canvas.delete("all")
+        self.preview_canvas.create_image(0, 0, image=photo, anchor="nw")
+        w, h = 420, 260
+        margin_x, margin_y = 105, 65
+        self.preview_rect = [margin_x, margin_y, w - margin_x, h - margin_y]
+        self._draw_preview_rect()
+
+    def _draw_preview_rect(self) -> None:
+        self.preview_canvas.delete("selection")
+        if not self.preview_rect:
+            return
+        self.preview_canvas.create_rectangle(
+            *self.preview_rect,
+            outline="#ff3b30",
+            width=3,
+            dash=(6, 4),
+            fill="#ff3b30",
+            stipple="gray25",
+            tags="selection",
+        )
+
+    def _preview_press(self, event) -> None:
+        if not self.preview_rect:
+            return
+        self.preview_drag = (event.x, event.y, list(self.preview_rect))
+
+    def _preview_drag_motion(self, event) -> None:
+        if not self.preview_drag:
+            return
+        sx, sy, rect = self.preview_drag
+        dx, dy = event.x - sx, event.y - sy
+        width = rect[2] - rect[0]
+        height = rect[3] - rect[1]
+        x0 = min(max(0, rect[0] + dx), 420 - width)
+        y0 = min(max(0, rect[1] + dy), 260 - height)
+        self.preview_rect = [x0, y0, x0 + width, y0 + height]
+        self._draw_preview_rect()
+
+    def _preview_release(self, _event) -> None:
+        self.preview_drag = None
+
+    def get_selection_bounds(self):
+        if not self.preview_bounds or not self.preview_rect:
+            return None
+        west, south, east, north = self.preview_bounds
+        x0, y0, x1, y1 = self.preview_rect
+        return {
+            "west": west + (east - west) * (x0 / 420),
+            "east": west + (east - west) * (x1 / 420),
+            "north": north + (south - north) * (y0 / 260),
+            "south": north + (south - north) * (y1 / 260),
+            "lat": (north + south) / 2,
+            "lon": (west + east) / 2,
+        }
 
 
 class ExportConfig:
@@ -208,6 +354,9 @@ class ExportConfig:
         area_km: float,
         height_scale: float,
         output: Path,
+        mode: str = "OSM location",
+        selection_bounds=None,
+        bar_maps_dir: Path | None = None,
     ) -> None:
         self.map_name = map_name
         self.location = location
@@ -216,6 +365,9 @@ class ExportConfig:
         self.area_km = area_km
         self.height_scale = height_scale
         self.output = output
+        self.mode = mode
+        self.selection_bounds = selection_bounds
+        self.bar_maps_dir = bar_maps_dir
 
 
 def sanitize_name(value: str) -> str:
@@ -224,22 +376,122 @@ def sanitize_name(value: str) -> str:
     return cleaned or "native_osm_map"
 
 
+def detect_bar_maps_dir() -> Path:
+    candidates = [
+        Path.home() / ".local/state/Beyond All Reason/maps",
+        Path.home() / ".local/state/Beyond All Reason/data/maps",
+        Path.home() / ".var/app/info.beyondallreason.bar/data/maps",
+        Path.home() / ".spring/maps",
+        Path.home() / "Documents/My Games/Spring/maps",
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    return candidates[0]
+
+
+def install_to_bar_maps(sd7_path: Path, maps_dir: Path | None, status) -> None:
+    target_dir = maps_dir or detect_bar_maps_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / sd7_path.name
+    shutil.copy2(sd7_path, target)
+    status(99, f"Installed map into BAR maps folder: {target}")
+
+
+def synthetic_bounds():
+    return {
+        "south": 48.75,
+        "west": 9.32,
+        "north": 48.79,
+        "east": 9.38,
+        "lat": 48.77,
+        "lon": 9.35,
+    }
+
+
+def create_synthetic_elevation_grid(bounds, grid_size: int):
+    random.seed(int(time.time()))
+    values = []
+    seed = random.random() * 1000
+    for y in range(grid_size):
+        for x in range(grid_size):
+            u = x / (grid_size - 1)
+            v = y / (grid_size - 1)
+            ridge = math.sin((u * 2.7 + v * 1.3 + seed) * math.pi) * 30
+            rolling = noise(u * 8 + seed, v * 8 - seed) * 24
+            detail = noise(u * 28 - seed, v * 28 + seed) * 9
+            values.append(90 + ridge + rolling + detail)
+    return {"grid_size": grid_size, "values": values}
+
+
+def load_osm_preview_image(bounds):
+    zoom = 13
+    center_x, center_y = latlon_to_tile(bounds["lat"], bounds["lon"], zoom)
+    tile_size = 256
+    image = Image.new("RGB", (tile_size * 3, tile_size * 3), (18, 27, 36))
+    for dy in range(-1, 2):
+        for dx in range(-1, 2):
+            tx = center_x + dx
+            ty = center_y + dy
+            try:
+                response = requests.get(
+                    f"https://tile.openstreetmap.org/{zoom}/{tx}/{ty}.png",
+                    headers={"User-Agent": "BAR Native Map Generator"},
+                    timeout=15,
+                )
+                if response.ok:
+                    with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+                        tmp.write(response.content)
+                        tmp.flush()
+                        tile = Image.open(tmp.name).convert("RGB")
+                    image.paste(tile, ((dx + 1) * tile_size, (dy + 1) * tile_size))
+            except Exception:
+                pass
+    preview = image.resize((420, 260), Image.Resampling.BILINEAR)
+    west, north = tile_to_latlon(center_x - 1, center_y - 1, zoom)
+    east, south = tile_to_latlon(center_x + 2, center_y + 2, zoom)
+    return preview, (west, south, east, north)
+
+
+def latlon_to_tile(lat: float, lon: float, zoom: int):
+    lat_rad = math.radians(lat)
+    n = 2**zoom
+    x = int((lon + 180.0) / 360.0 * n)
+    y = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
+    return x, y
+
+
+def tile_to_latlon(x: int, y: int, zoom: int):
+    n = 2**zoom
+    lon = x / n * 360.0 - 180.0
+    lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n))))
+    return lon, lat
+
+
 def export_native_package(config: ExportConfig, status) -> None:
     if config.output.suffix.lower() != ".sd7":
         config.output = config.output.with_suffix(".sd7")
     map_units = config.size // 64
-    bounds = resolve_bounds(config.location, config.area_km, status)
+    if config.mode == "Random procedural":
+        bounds = synthetic_bounds()
+    else:
+        bounds = config.selection_bounds or resolve_bounds(config.location, config.area_km, status)
 
     with tempfile.TemporaryDirectory(prefix="bar-native-export-") as tmp:
         root = Path(tmp)
         assets = root / "assets"
         assets.mkdir()
 
-        status(15, "Sampling elevation grid...")
-        elevation = load_elevation_grid(bounds, grid_size=24, status=status)
+        if config.mode == "Random procedural":
+            status(15, "Creating random procedural elevation...")
+            elevation = create_synthetic_elevation_grid(bounds, grid_size=24)
+            features = []
+        else:
+            status(15, "Sampling elevation grid...")
+            elevation = load_elevation_grid(bounds, grid_size=24, status=status)
 
-        status(28, "Loading OSM features with fallback...")
-        features = load_osm_features(bounds)
+            status(28, "Loading OSM features with fallback...")
+            features = load_osm_features(bounds)
 
         status(38, "Generating base terrain...")
         base_height, base_texture = generate_base_maps(config, bounds, elevation, features)
@@ -284,6 +536,7 @@ def export_native_package(config: ExportConfig, status) -> None:
         status(90, "Compiling playable .sd7 with PyMapConv...")
         final_sd7 = compile_playable_sd7(root, config, status)
         shutil.copy2(final_sd7, config.output)
+        install_to_bar_maps(config.output, config.bar_maps_dir, status)
 
 
 def resolve_bounds(location: str, area_km: float, status):
