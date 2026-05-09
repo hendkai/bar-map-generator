@@ -54,7 +54,7 @@ class NativeExporterApp:
         self.map_size = tk.StringVar(value="1024")
         self.players = tk.StringVar(value="4")
         self.area_km = tk.StringVar(value="4.0")
-        self.height_scale = tk.StringVar(value="1.0")
+        self.height_scale = tk.StringVar(value="2.5")
         self.output_path = tk.StringVar(value=str(Path.home() / "struempfelbach_native.sdz"))
         self.bar_maps_path = tk.StringVar(value=str(detect_bar_maps_dir()))
         self.status = tk.StringVar(value="Ready.")
@@ -165,7 +165,12 @@ class NativeExporterApp:
             grid,
             row,
             "Height scale",
-            ttk.Combobox(grid, textvariable=self.height_scale, values=("0.7", "1.0", "1.35"), state="readonly"),
+            ttk.Combobox(
+                grid,
+                textvariable=self.height_scale,
+                values=("1.0", "1.75", "2.5", "3.5", "5.0", "7.0"),
+                state="readonly",
+            ),
         )
         row += 1
 
@@ -384,6 +389,8 @@ class ExportConfig:
         self.mode = mode
         self.selection_bounds = selection_bounds
         self.bar_maps_dir = bar_maps_dir
+        self.compile_min_height = -80.0
+        self.compile_max_height = 360.0
 
 
 def sanitize_name(value: str) -> str:
@@ -655,6 +662,9 @@ def generate_base_maps(config: ExportConfig, bounds, elevation, features):
     min_el = min(elevation["values"])
     max_el = max(elevation["values"])
     span = max(1, max_el - min_el)
+    height_range = max(180.0, min(1200.0, span * config.height_scale * 2.8))
+    config.compile_min_height = -max(45.0, height_range * 0.18)
+    config.compile_max_height = height_range
     mask = rasterize_features(config, bounds, features)
     height_img = Image.new("L", (size, size))
     tex = Image.new("RGB", (size, size))
@@ -665,10 +675,11 @@ def generate_base_maps(config: ExportConfig, bounds, elevation, features):
         for x in range(size):
             u = x / (size - 1)
             elev = sample_elevation(elevation, u, v)
-            h = 72 + ((elev - min_el) / span) * 150 * config.height_scale + noise(x * 0.025, y * 0.025) * 8
+            normalized = (elev - min_el) / span
+            h = 42 + normalized * 205 + noise(x * 0.025, y * 0.025) * 5
             m = mask.getpixel((x, y))
             if m == (0, 0, 255):
-                h = min(h, 42)
+                h = min(h, 30)
             h = int(max(0, min(255, h)))
             hpx[x, y] = h
             tpx[x, y] = terrain_color(h, m)
@@ -896,6 +907,10 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
         "-u",
         "-q",
         "1",
+        "-x",
+        f"{config.compile_max_height:.2f}",
+        "-n",
+        f"{config.compile_min_height:.2f}",
         "-a",
         str(root / "assets" / "heightmap.bmp"),
         "-m",
@@ -930,6 +945,10 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
             "-u",
             "-q",
             "1",
+            "-x",
+            f"{config.compile_max_height:.2f}",
+            "-n",
+            f"{config.compile_min_height:.2f}",
             "-a",
             str(root / "assets" / "heightmap.bmp"),
             "-m",
@@ -974,6 +993,13 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     shutil.copytree(root / "maphelper", map_container / "maphelper")
     shutil.copy2(smf_path, map_container_maps / f"{config.map_name}.smf")
     shutil.copy2(smt_path, map_container_maps / f"{config.map_name}.smt")
+    for suffix in (".png", ".jpg"):
+        preview = compiled_maps / f"{config.map_name}{suffix}"
+        if preview.exists():
+            shutil.copy2(preview, map_container_maps / preview.name)
+    source_minimap = root / "assets" / "minimap.png"
+    if source_minimap.exists():
+        shutil.copy2(source_minimap, map_container / "minimap.png")
 
     if final_sdz.exists():
         final_sdz.unlink()
