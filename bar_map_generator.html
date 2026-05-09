@@ -581,6 +581,17 @@
             color: #84c8ee;
         }
 
+        .export-limits {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 193, 7, 0.25);
+            background: rgba(255, 193, 7, 0.08);
+            color: #d8c17a;
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
+
         #osmMap {
             width: 100%;
             height: 500px;
@@ -764,6 +775,9 @@
         <div id="panel-procedural" class="mode-panel active">
         <div class="workflow-note">
             <strong>GitHub Pages workflow:</strong> this page generates previews and a complete ZIP in your browser. GitHub Pages cannot run Python or PyMapConv, so extract the ZIP locally and run `build.sh`, `build.bat`, or `python3 build_map.py` to compile the final `.sd7` map.
+            <div class="export-limits">
+                Browser ZIP export supports 512x512 and 1024x1024 maps. Larger maps need a native desktop/exporter workflow because browser texture generation can freeze the tab.
+            </div>
         </div>
         <div class="controls">
             <div class="control-group">
@@ -772,7 +786,7 @@
                     <select id="mapSize">
                         <option value="512" selected>512x512 (Small, downloadable)</option>
                         <option value="1024">1024x1024 (Medium, downloadable)</option>
-                        <option value="2048">2048x2048 (Large preview)</option>
+                        <option value="2048">2048x2048 (Large, desktop exporter needed)</option>
                     </select>
                 </label>
 
@@ -901,6 +915,9 @@
         <div id="panel-osm" class="mode-panel">
             <div class="osm-intro">
                 <strong>Import from OpenStreetMap:</strong> search for a place or address, then draw a red rectangle around the area you want to turn into a BAR map. This GitHub Pages app generates previews and a downloadable build package in-browser; the final `.sd7` compile still runs locally after extracting the ZIP.
+                <div class="export-limits">
+                    Browser ZIP export supports 512x512 and 1024x1024 maps. For larger OSM maps, use a native desktop/exporter workflow instead of browser export.
+                </div>
             </div>
             <div class="osm-section">
                 <div id="osmMap"></div>
@@ -919,7 +936,7 @@
                         <select id="osmMapSize">
                             <option value="512" selected>512x512 (Small, downloadable)</option>
                             <option value="1024">1024x1024 (Medium, downloadable)</option>
-                            <option value="2048">2048x2048 (Large preview)</option>
+                            <option value="2048">2048x2048 (Large, desktop exporter needed)</option>
                         </select>
                     </label>
 
@@ -3168,7 +3185,7 @@
                 alert(
                     'Complete browser ZIP export is currently limited to 512x512 and 1024x1024 maps. ' +
                     '2048x2048 packages require extremely large BAR texture/normalmap canvases and can freeze the browser before the download starts. ' +
-                    'Please select 512x512 or 1024x1024, regenerate the map, and download again.'
+                    'Please select 512x512 or 1024x1024, regenerate the map, and download again. For larger maps, use a native desktop/exporter workflow instead of browser export.'
                 );
                 return;
             }
