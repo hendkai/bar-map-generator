@@ -55,10 +55,11 @@ class NativeExporterApp:
         self.players = tk.StringVar(value="4")
         self.area_km = tk.StringVar(value="4.0")
         self.height_scale = tk.StringVar(value="1.0")
-        self.output_path = tk.StringVar(value=str(Path.home() / "BAR_native_map.sd7"))
+        self.output_path = tk.StringVar(value=str(Path.home() / "struempfelbach_native.sdz"))
         self.bar_maps_path = tk.StringVar(value=str(detect_bar_maps_dir()))
         self.status = tk.StringVar(value="Ready.")
         self.progress = tk.DoubleVar(value=0)
+        self.map_name.trace_add("write", self._sync_output_name)
 
         self._build_style()
         self._build_ui()
@@ -172,7 +173,7 @@ class NativeExporterApp:
         output_frame.columnconfigure(0, weight=1)
         ttk.Entry(output_frame, textvariable=self.output_path).grid(row=0, column=0, sticky="ew", padx=(0, 8))
         ttk.Button(output_frame, text="Browse", command=self._choose_output).grid(row=0, column=1)
-        self._row(grid, row, "Output .sd7", output_frame)
+        self._row(grid, row, "Output .sdz", output_frame)
         row += 1
 
         bar_frame = ttk.Frame(grid)
@@ -184,7 +185,7 @@ class NativeExporterApp:
         note = ttk.Label(
             shell,
             text=(
-                "This native exporter generates the source assets, runs PyMapConv, and packages a BAR-loadable .sd7. "
+                "This native exporter generates the source assets, runs PyMapConv, and packages a BAR-loadable .sdz. "
                 "Large maps can take several minutes and use several GB of temporary disk space. "
                 "The finished map is copied into the detected BAR maps folder automatically."
             ),
@@ -199,7 +200,7 @@ class NativeExporterApp:
         actions = ttk.Frame(shell)
         actions.pack(fill="x")
         ttk.Button(actions, text="Load OSM Preview", command=self._load_preview).pack(side="left", padx=(0, 10))
-        ttk.Button(actions, text="Generate Playable .sd7", style="Accent.TButton", command=self._start_export).pack(side="left")
+        ttk.Button(actions, text="Generate Playable .sdz", style="Accent.TButton", command=self._start_export).pack(side="left")
         ttk.Button(actions, text="Open Output Folder", command=self._open_output_folder).pack(side="left", padx=10)
 
         preview_frame = ttk.Frame(shell)
@@ -230,12 +231,17 @@ class NativeExporterApp:
     def _choose_output(self) -> None:
         filename = filedialog.asksaveasfilename(
             title="Save BAR map package",
-            defaultextension=".sd7",
-            filetypes=(("BAR map", "*.sd7"), ("All files", "*.*")),
+            defaultextension=".sdz",
+            filetypes=(("BAR map ZIP archive", "*.sdz"), ("All files", "*.*")),
             initialfile=Path(self.output_path.get()).name,
         )
         if filename:
             self.output_path.set(filename)
+
+    def _sync_output_name(self, *_args) -> None:
+        map_name = sanitize_name(self.map_name.get())
+        current = Path(self.output_path.get()).expanduser()
+        self.output_path.set(str(current.with_name(f"{map_name}.sdz")))
 
     def _choose_bar_folder(self) -> None:
         folder = filedialog.askdirectory(title="Select BAR maps folder", initialdir=self.bar_maps_path.get())
@@ -271,7 +277,7 @@ class NativeExporterApp:
                 players=int(self.players.get()),
                 area_km=float(self.area_km.get()),
                 height_scale=float(self.height_scale.get()),
-                output=Path(self.output_path.get()).expanduser(),
+                output=Path(self.output_path.get()).expanduser().with_name(f"{sanitize_name(self.map_name.get())}.sdz"),
                 mode=self.mode.get(),
                 selection_bounds=self.get_selection_bounds(),
                 bar_maps_dir=Path(self.bar_maps_path.get()).expanduser(),
@@ -479,8 +485,9 @@ def tile_to_latlon(x: int, y: int, zoom: int):
 
 
 def export_native_package(config: ExportConfig, status) -> None:
-    if config.output.suffix.lower() != ".sd7":
-        config.output = config.output.with_suffix(".sd7")
+    if config.output.suffix.lower() != ".sdz":
+        config.output = config.output.with_suffix(".sdz")
+    config.output = config.output.with_name(f"{config.map_name}.sdz")
     map_units = config.size // 64
     if config.mode == "Random procedural":
         bounds = synthetic_bounds()
@@ -543,9 +550,9 @@ def export_native_package(config: ExportConfig, status) -> None:
                 if path.is_file():
                     zf.write(path, path.relative_to(root).as_posix())
 
-        status(90, "Compiling playable .sd7 with PyMapConv...")
-        final_sd7 = compile_playable_sd7(root, config, status)
-        shutil.copy2(final_sd7, config.output)
+        status(90, "Compiling playable .sdz with PyMapConv...")
+        final_sdz = compile_playable_sd7(root, config, status)
+        shutil.copy2(final_sdz, config.output)
         install_to_bar_maps(config.output, config.bar_maps_dir, status)
 
 
@@ -840,7 +847,7 @@ Native desktop export for Beyond All Reason.
 - Location: {config.location}
 - OSM feature count: {feature_count}
 
-The native GUI already attempted to create the final `.sd7`. To rebuild from
+The native GUI already attempted to create the final `.sdz`. To rebuild from
 this source package, run `python3 build_map.py`.
 """
 
@@ -857,7 +864,7 @@ cfg = ExportConfig(
     players={config.players},
     area_km={config.area_km},
     height_scale={config.height_scale},
-    output=Path("output/{config.map_name}.sd7"),
+    output=Path("output/{config.map_name}.sdz"),
 )
 Path("output").mkdir(exist_ok=True)
 result = compile_playable_sd7(Path("."), cfg, lambda pct, msg: print(msg))
@@ -874,7 +881,7 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     map_container_maps = map_container / "maps"
     output_dir = build_dir / "output"
     output_smf = compiled_maps / f"{config.map_name}.smf"
-    final_sd7 = output_dir / f"{config.map_name}.sd7"
+    final_sdz = output_dir / f"{config.map_name}.sdz"
     log_path = config.output.with_suffix(".pymapconv.log")
 
     tools_dir.mkdir(exist_ok=True)
@@ -959,7 +966,7 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     if smt_path is None:
         raise RuntimeError("PyMapConv finished, but no .smt file was produced.")
 
-    status(97, "Packing Spring/BAR .sd7 container...")
+    status(97, "Packing Spring/BAR .sdz container...")
     if map_container.exists():
         shutil.rmtree(map_container)
     map_container_maps.mkdir(parents=True)
@@ -968,16 +975,16 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     shutil.copy2(smf_path, map_container_maps / f"{config.map_name}.smf")
     shutil.copy2(smt_path, map_container_maps / f"{config.map_name}.smt")
 
-    if final_sd7.exists():
-        final_sd7.unlink()
-    with zipfile.ZipFile(final_sd7, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+    if final_sdz.exists():
+        final_sdz.unlink()
+    with zipfile.ZipFile(final_sdz, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         for path in map_container.rglob("*"):
             if path.is_file():
                 archive.write(path, path.relative_to(map_container).as_posix())
 
-    if final_sd7.stat().st_size <= 0:
-        raise RuntimeError(".sd7 package was created but is empty.")
-    return final_sd7
+    if final_sdz.stat().st_size <= 0:
+        raise RuntimeError(".sdz package was created but is empty.")
+    return final_sdz
 
 
 def ensure_pymapconv(tools_dir: Path, status) -> Path:
