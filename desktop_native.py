@@ -883,7 +883,7 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     pymapconv = ensure_pymapconv(tools_dir, status)
     prepare_pymapconv_runtime(root)
 
-    cmd = [
+    full_cmd = [
         str(pymapconv),
         "-a",
         str(root / "assets" / "heightmap.bmp"),
@@ -906,8 +906,27 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     ]
 
     status(92, "Running PyMapConv...")
-    result = subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=1800)
-    write_pymapconv_log(log_path, cmd, result)
+    result = run_pymapconv_command(root, full_cmd)
+    combined_output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
+    if result.returncode != 0 and is_texture_compression_failure(combined_output):
+        status(94, "Texture compression failed. Retrying PyMapConv with skip-texture fallback...")
+        prepare_pymapconv_runtime(root)
+        fallback_cmd = [
+            str(pymapconv),
+            "-a",
+            str(root / "assets" / "heightmap.bmp"),
+            "-m",
+            str(root / "assets" / "metalmap.bmp"),
+            "-s",
+            "-o",
+            str(output_smf),
+        ]
+        fallback_result = run_pymapconv_command(root, fallback_cmd)
+        write_pymapconv_log(log_path, full_cmd, result, fallback_cmd, fallback_result)
+        result = fallback_result
+    else:
+        write_pymapconv_log(log_path, full_cmd, result)
+
     combined_output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
     if combined_output:
         status(94, f"PyMapConv output written to {log_path}\n{combined_output[-1600:]}")
@@ -974,8 +993,12 @@ def prepare_pymapconv_runtime(root: Path) -> None:
     temp_dir = root / "temp"
     temp_dir.mkdir(exist_ok=True)
     # PyMapConv writes intermediate tiles to relative temp/threadN paths.
-    for idx in range(1, 17):
-        (temp_dir / f"thread{idx}").mkdir(parents=True, exist_ok=True)
+    for idx in range(0, 17):
+        thread_dir = temp_dir / f"thread{idx}"
+        thread_dir.mkdir(parents=True, exist_ok=True)
+        for tile_idx in range(0, 512):
+            (thread_dir / f"temp{tile_idx}.BMP").touch(exist_ok=True)
+            (thread_dir / f"temp{tile_idx}.TIFF").touch(exist_ok=True)
 
     resources_dir = root / "resources"
     resources_dir.mkdir(exist_ok=True)
@@ -984,25 +1007,58 @@ def prepare_pymapconv_runtime(root: Path) -> None:
         Image.new("RGB", (64, 64), (128, 128, 128)).save(geovent)
 
 
-def write_pymapconv_log(log_path: Path, cmd: list[str], result: subprocess.CompletedProcess[str]) -> None:
+def run_pymapconv_command(root: Path, cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=1800)
+
+
+def is_texture_compression_failure(output: str) -> bool:
+    patterns = (
+        "temp/thread",
+        "nvdxt.exe",
+        "CompressonatorCLI",
+        "rl_completion_rewrite_hook",
+        "FileNotFoundError",
+    )
+    return any(pattern in output for pattern in patterns)
+
+
+def write_pymapconv_log(
+    log_path: Path,
+    cmd: list[str],
+    result: subprocess.CompletedProcess[str],
+    fallback_cmd: list[str] | None = None,
+    fallback_result: subprocess.CompletedProcess[str] | None = None,
+) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path.write_text(
-        "\n".join(
+    sections = [
+        "BAR Native Map Generator - PyMapConv log",
+        f"Command: {' '.join(cmd)}",
+        f"Exit code: {result.returncode}",
+        "",
+        "STDOUT:",
+        result.stdout or "",
+        "",
+        "STDERR:",
+        result.stderr or "",
+        "",
+    ]
+    if fallback_cmd and fallback_result:
+        sections.extend(
             [
-                "BAR Native Map Generator - PyMapConv log",
-                f"Command: {' '.join(cmd)}",
-                f"Exit code: {result.returncode}",
+                "",
+                "Fallback PyMapConv run",
+                f"Command: {' '.join(fallback_cmd)}",
+                f"Exit code: {fallback_result.returncode}",
                 "",
                 "STDOUT:",
-                result.stdout or "",
+                fallback_result.stdout or "",
                 "",
                 "STDERR:",
-                result.stderr or "",
+                fallback_result.stderr or "",
                 "",
             ]
-        ),
-        encoding="utf-8",
-    )
+        )
+    log_path.write_text("\n".join(sections), encoding="utf-8")
 
 
 def find_file(root: Path, suffix: str) -> Path | None:
