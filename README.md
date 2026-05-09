@@ -30,6 +30,24 @@ While the map generation and asset creation works, the automatic compilation sys
 5. Download complete map package
 6. Run the included build script to compile the map
 
+## ⚡ Quick Use: GitHub Pages
+
+GitHub Pages can host the generator UI, but it cannot run Python, PyMapConv, or native compile tools. The final `.sd7` build therefore happens on your own machine.
+
+1. Open the GitHub Pages site.
+2. Generate a procedural or OSM-based map preview in the browser.
+3. Click **Download Complete Map Package (.zip)**.
+4. Extract the ZIP locally.
+5. Run one of the included build scripts:
+   ```bash
+   python3 build_map.py
+   ```
+   or use `build.sh` on Linux/macOS and `build.bat` on Windows.
+6. The compiled map will be written to `output/<map-name>.sd7`.
+7. Copy the `.sd7` to your BAR maps folder and test it in-game.
+
+In short: **GitHub Pages generates the package; your PC compiles the playable `.sd7`.**
+
 ## 📋 Requirements
 
 - **Web Browser**: Modern browser with JavaScript support

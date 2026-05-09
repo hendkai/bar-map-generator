@@ -293,6 +293,22 @@
             margin-top: 0;
         }
 
+        .workflow-note {
+            background: rgba(56, 152, 236, 0.06);
+            border: 1px solid rgba(56, 152, 236, 0.18);
+            border-left: 3px solid #3898ec;
+            border-radius: 6px;
+            padding: 16px 18px;
+            margin-bottom: 24px;
+            color: #b8c7d6;
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+
+        .workflow-note strong {
+            color: #84c8ee;
+        }
+
         .download-section {
             margin-top: 28px;
             text-align: center;
@@ -728,6 +744,9 @@
         </div>
 
         <div id="panel-procedural" class="mode-panel active">
+        <div class="workflow-note">
+            <strong>GitHub Pages workflow:</strong> this page generates previews and a complete ZIP in your browser. GitHub Pages cannot run Python or PyMapConv, so extract the ZIP locally and run `build.sh`, `build.bat`, or `python3 build_map.py` to compile the final `.sd7` map.
+        </div>
         <div class="controls">
             <div class="control-group">
                 <h3>Map Basics</h3>
@@ -831,7 +850,7 @@
             <h3>Export for BAR</h3>
             <button class="primary" onclick="downloadCompleteMapPackage()">Download Complete Map Package (.zip)</button>
             <p style="margin: 14px 0 0; font-size: 0.8rem; color: #666;">
-                Experimental — generates all assets + build script
+                Browser export only — compile the final .sd7 locally with Python + PyMapConv from the downloaded ZIP.
             </p>
             <hr style="margin: 18px 0; border: none; border-top: 1px solid rgba(255,255,255,0.06);">
             <div style="font-size: 0.75rem; color: #666; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 10px;">Individual Files</div>
@@ -863,7 +882,7 @@
 
         <div id="panel-osm" class="mode-panel">
             <div class="osm-intro">
-                <strong>Import from OpenStreetMap:</strong> search for a place or address, then draw a red rectangle around the area you want to turn into a BAR map. The generator uses OSM land, water and road data plus throttled elevation samples; keep the selected area modest for better API reliability and faster previews.
+                <strong>Import from OpenStreetMap:</strong> search for a place or address, then draw a red rectangle around the area you want to turn into a BAR map. This GitHub Pages app generates previews and a downloadable build package in-browser; the final `.sd7` compile still runs locally after extracting the ZIP.
             </div>
             <div class="osm-section">
                 <div id="osmMap"></div>
@@ -942,6 +961,9 @@
             <div class="download-section">
                 <h3>Export Generated OSM Map</h3>
                 <button class="primary" onclick="downloadCompleteMapPackage()">Download Complete Map Package (.zip)</button>
+                <p style="margin: 14px 0 0; font-size: 0.8rem; color: #666;">
+                    Extract the ZIP locally and run the included build script to create the final .sd7.
+                </p>
                 <button onclick="downloadHeightmap()">Heightmap</button>
                 <button onclick="downloadTexture()">Texture</button>
                 <button onclick="downloadConfig()">mapinfo.lua</button>
