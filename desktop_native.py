@@ -34,6 +34,8 @@ PYMAPCONV_SOURCE_URL = "https://raw.githubusercontent.com/Beherith/springrts_smf
 PYMAPCONV_VERSION_URL = "https://raw.githubusercontent.com/Beherith/springrts_smf_compiler/v0.6.3/src/version.py"
 PREVIEW_WIDTH = 1200
 PREVIEW_HEIGHT = 720
+MASK_WATER_BODY = (0, 0, 255)
+MASK_WATERWAY = (0, 0, 180)
 
 
 class NativeExporterApp:
@@ -508,11 +510,11 @@ def export_native_package(config: ExportConfig, status) -> None:
 
         if config.mode == "Random procedural":
             status(15, "Creating random procedural elevation...")
-            elevation = create_synthetic_elevation_grid(bounds, grid_size=24)
+            elevation = create_synthetic_elevation_grid(bounds, grid_size=48)
             features = []
         else:
-            status(15, "Sampling elevation grid...")
-            elevation = load_elevation_grid(bounds, grid_size=24, status=status)
+            status(15, "Sampling 64x64 elevation grid...")
+            elevation = load_elevation_grid(bounds, grid_size=64, status=status)
 
             status(28, "Loading OSM features with fallback...")
             features = load_osm_features(bounds)
@@ -662,8 +664,8 @@ def generate_base_maps(config: ExportConfig, bounds, elevation, features):
     min_el = min(elevation["values"])
     max_el = max(elevation["values"])
     span = max(1, max_el - min_el)
-    height_range = max(180.0, min(1200.0, span * config.height_scale * 2.8))
-    config.compile_min_height = -max(45.0, height_range * 0.18)
+    height_range = max(220.0, min(1400.0, span * config.height_scale))
+    config.compile_min_height = -max(25.0, height_range * 0.08)
     config.compile_max_height = height_range
     mask = rasterize_features(config, bounds, features)
     height_img = Image.new("L", (size, size))
@@ -676,10 +678,12 @@ def generate_base_maps(config: ExportConfig, bounds, elevation, features):
             u = x / (size - 1)
             elev = sample_elevation(elevation, u, v)
             normalized = (elev - min_el) / span
-            h = 42 + normalized * 205 + noise(x * 0.025, y * 0.025) * 5
+            h = 24 + normalized * 218 + noise(x * 0.025, y * 0.025) * 3
             m = mask.getpixel((x, y))
-            if m == (0, 0, 255):
-                h = min(h, 30)
+            if m == MASK_WATER_BODY:
+                h = min(h, 42)
+            elif m == MASK_WATERWAY:
+                h -= 10
             h = int(max(0, min(255, h)))
             hpx[x, y] = h
             tpx[x, y] = terrain_color(h, m)
@@ -707,8 +711,10 @@ def rasterize_features(config: ExportConfig, bounds, features):
 
 
 def feature_color(tags):
-    if tags.get("waterway") or tags.get("natural") in {"water", "wetland"}:
-        return (0, 0, 255)
+    if tags.get("waterway"):
+        return MASK_WATERWAY
+    if tags.get("natural") in {"water", "wetland"}:
+        return MASK_WATER_BODY
     if tags.get("natural") == "wood" or tags.get("landuse") == "forest":
         return (0, 255, 0)
     if tags.get("highway"):
@@ -753,7 +759,7 @@ def noise(x: float, y: float) -> float:
 
 
 def terrain_color(height: int, mask):
-    if height < 58 or mask == (0, 0, 255):
+    if height < 58 or mask in {MASK_WATER_BODY, MASK_WATERWAY}:
         return (26, 92, 143)
     if mask == (0, 255, 255):
         return (102, 101, 94)
