@@ -771,7 +771,7 @@
                 <label>Map Size:
                     <select id="mapSize">
                         <option value="512" selected>512x512 (Small, downloadable)</option>
-                        <option value="1024">1024x1024 (Medium preview)</option>
+                        <option value="1024">1024x1024 (Medium, downloadable)</option>
                         <option value="2048">2048x2048 (Large preview)</option>
                     </select>
                 </label>
@@ -918,7 +918,7 @@
                     <label>BAR Map Size:
                         <select id="osmMapSize">
                             <option value="512" selected>512x512 (Small, downloadable)</option>
-                            <option value="1024">1024x1024 (Medium preview)</option>
+                            <option value="1024">1024x1024 (Medium, downloadable)</option>
                             <option value="2048">2048x2048 (Large preview)</option>
                         </select>
                     </label>
@@ -3164,11 +3164,11 @@
                 return;
             }
 
-            if (mapConfig.size > 512) {
+            if (mapConfig.size > 1024) {
                 alert(
-                    'Complete browser ZIP export is currently limited to 512x512 maps. ' +
-                    '1024x1024 and 2048x2048 packages require very large BAR texture/normalmap canvases ' +
-                    'and can freeze the browser before the download starts. Please select 512x512, regenerate the map, and download again.'
+                    'Complete browser ZIP export is currently limited to 512x512 and 1024x1024 maps. ' +
+                    '2048x2048 packages require extremely large BAR texture/normalmap canvases and can freeze the browser before the download starts. ' +
+                    'Please select 512x512 or 1024x1024, regenerate the map, and download again.'
                 );
                 return;
             }
@@ -5186,23 +5186,19 @@ https://github.com/beyond-all-reason/bar-map-generator
             canvas.height = textureSize;
             const ctx = canvas.getContext('2d');
 
-            const imageData = ctx.createImageData(textureSize, textureSize);
-            const scale = size / textureSize;
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(createTextureSourceCanvas(), 0, 0, textureSize, textureSize);
+            return canvas;
+        }
 
-            for (let y = 0; y < textureSize; y++) {
-                for (let x = 0; x < textureSize; x++) {
-                    const sourceX = Math.floor(x * scale);
-                    const sourceY = Math.floor(y * scale);
-                    const sourceIndex = (sourceY * size + sourceX) * 4;
-                    const index = (y * textureSize + x) * 4;
-
-                    imageData.data[index] = textureData[sourceIndex];         // R
-                    imageData.data[index + 1] = textureData[sourceIndex + 1]; // G
-                    imageData.data[index + 2] = textureData[sourceIndex + 2]; // B
-                    imageData.data[index + 3] = 255;                          // A - solid, no transparency
-                }
-            }
-
+        function createTextureSourceCanvas() {
+            const size = mapConfig.size;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.createImageData(size, size);
+            imageData.data.set(textureData);
             ctx.putImageData(imageData, 0, 0);
             return canvas;
         }
@@ -5217,43 +5213,8 @@ https://github.com/beyond-all-reason/bar-map-generator
             canvas.height = normalmapSize;
             const ctx = canvas.getContext('2d');
 
-            const imageData = ctx.createImageData(normalmapSize, normalmapSize);
-
-            // Generate simple normalmap from heightmap
-            for (let y = 0; y < normalmapSize; y++) {
-                for (let x = 0; x < normalmapSize; x++) {
-                    const heightScale = size / normalmapSize;
-                    const hx = Math.floor(x * heightScale);
-                    const hy = Math.floor(y * heightScale);
-
-                    // Sample neighboring heights for normal calculation
-                    const h0 = getHeightAt(hx, hy);
-                    const h1 = getHeightAt(hx + 1, hy);
-                    const h2 = getHeightAt(hx, hy + 1);
-
-                    // Calculate normal
-                    const dx = (h1 - h0) / 255;
-                    const dy = (h2 - h0) / 255;
-
-                    const nx = -dx;
-                    const ny = -dy;
-                    const nz = 1;
-
-                    // Normalize
-                    const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
-                    const normalX = (nx / length + 1) * 127.5;
-                    const normalY = (ny / length + 1) * 127.5;
-                    const normalZ = (nz / length + 1) * 127.5;
-
-                    const index = (y * normalmapSize + x) * 4;
-                    imageData.data[index] = normalX;     // R
-                    imageData.data[index + 1] = normalY; // G
-                    imageData.data[index + 2] = normalZ; // B
-                    imageData.data[index + 3] = 255;     // A
-                }
-            }
-
-            ctx.putImageData(imageData, 0, 0);
+            ctx.fillStyle = 'rgb(128, 128, 255)';
+            ctx.fillRect(0, 0, normalmapSize, normalmapSize);
             return canvas;
         }
 
@@ -5274,32 +5235,8 @@ https://github.com/beyond-all-reason/bar-map-generator
             canvas.height = specularSize;
             const ctx = canvas.getContext('2d');
 
-            const imageData = ctx.createImageData(specularSize, specularSize);
-            const scale = size / specularSize;
-
-            for (let y = 0; y < specularSize; y++) {
-                for (let x = 0; x < specularSize; x++) {
-                    const sourceX = Math.floor(x * scale);
-                    const sourceY = Math.floor(y * scale);
-                    const height = heightmapData[sourceY * size + sourceX];
-                    const index = (y * specularSize + x) * 4;
-
-                    // Generate specular based on height and material type
-                    let specular = 64; // Base specular
-                    if (height < mapConfig.waterLevel) {
-                        specular = 200; // Water is reflective
-                    } else if (height > mapConfig.waterLevel + 100) {
-                        specular = 128; // Rock is somewhat reflective
-                    }
-
-                    imageData.data[index] = specular;     // R
-                    imageData.data[index + 1] = specular; // G
-                    imageData.data[index + 2] = specular; // B
-                    imageData.data[index + 3] = 255;      // A
-                }
-            }
-
-            ctx.putImageData(imageData, 0, 0);
+            ctx.fillStyle = 'rgb(72, 72, 72)';
+            ctx.fillRect(0, 0, specularSize, specularSize);
             return canvas;
         }
 
@@ -5309,24 +5246,8 @@ https://github.com/beyond-all-reason/bar-map-generator
             canvas.height = 1024;
             const ctx = canvas.getContext('2d');
 
-            const imageData = ctx.createImageData(1024, 1024);
-            const scale = mapConfig.size / 1024;
-
-            for (let y = 0; y < 1024; y++) {
-                for (let x = 0; x < 1024; x++) {
-                    const sourceX = Math.floor(x * scale);
-                    const sourceY = Math.floor(y * scale);
-                    const sourceIndex = (sourceY * mapConfig.size + sourceX) * 4;
-                    const index = (y * 1024 + x) * 4;
-
-                    imageData.data[index] = textureData[sourceIndex];         // R
-                    imageData.data[index + 1] = textureData[sourceIndex + 1]; // G
-                    imageData.data[index + 2] = textureData[sourceIndex + 2]; // B
-                    imageData.data[index + 3] = 255;                          // A
-                }
-            }
-
-            ctx.putImageData(imageData, 0, 0);
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(createTextureSourceCanvas(), 0, 0, 1024, 1024);
             return canvas;
         }
 
@@ -5583,7 +5504,7 @@ https://github.com/beyond-all-reason/bar-map-generator
             // Convert canvases to blobs with correct formats for PyMapConv
             const heightmapBlob = await canvasToBlob(assets.heightmap, 'image/bmp');
             const metalmapBlob = await canvasToBlob(assets.metalmap, 'image/bmp');
-            const textureBlob = await canvasToBlob(assets.texture, 'image/bmp');      // BMP without alpha
+            const textureBlob = await canvasToBlob(assets.texture, mapConfig.size > 512 ? 'image/png' : 'image/bmp');
             const normalmapBlob = await canvasToBlob(assets.normalmap, 'image/png');
             const specularmapBlob = await canvasToBlob(assets.specularmap, 'image/png');
             const minimapBlob = await canvasToBlob(assets.minimap, 'image/png');
@@ -5595,7 +5516,7 @@ https://github.com/beyond-all-reason/bar-map-generator
             // Add all asset files to assets folder with correct formats for PyMapConv
             assetsFolder.file("heightmap.bmp", heightmapBlob);  // BMP for heightmap (8-bit is acceptable)
             assetsFolder.file("metalmap.bmp", metalmapBlob);
-            assetsFolder.file("texture.bmp", textureBlob);      // BMP without alpha channel
+            assetsFolder.file("texture.bmp", textureBlob);      // Large exports use PNG bytes; build_map.py converts by content.
             assetsFolder.file("normalmap.png", normalmapBlob);
             assetsFolder.file("specularmap.png", specularmapBlob);
             assetsFolder.file("minimap.png", minimapBlob);
