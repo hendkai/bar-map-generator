@@ -62,6 +62,8 @@ class NativeExporterApp:
         self.status = tk.StringVar(value="Ready.")
         self.progress = tk.DoubleVar(value=0)
         self.map_name.trace_add("write", self._sync_output_name)
+        self.map_size.trace_add("write", self._sync_preview_selection)
+        self.area_km.trace_add("write", self._sync_preview_selection)
 
         self._build_style()
         self._build_ui()
@@ -250,6 +252,11 @@ class NativeExporterApp:
         current = Path(self.output_path.get()).expanduser()
         self.output_path.set(str(current.with_name(f"{map_name}.sdz")))
 
+    def _sync_preview_selection(self, *_args) -> None:
+        if self.preview_bounds and self.preview_rect:
+            self._fit_preview_rect_to_bar_size()
+            self._draw_preview_rect()
+
     def _choose_bar_folder(self) -> None:
         folder = filedialog.askdirectory(title="Select BAR maps folder", initialdir=self.bar_maps_path.get())
         if folder:
@@ -282,7 +289,7 @@ class NativeExporterApp:
                 location=self.location.get().strip(),
                 size=int(self.map_size.get()),
                 players=int(self.players.get()),
-                area_km=float(self.area_km.get()),
+                area_km=self._selected_area_km(),
                 height_scale=float(self.height_scale.get()),
                 output=Path(self.output_path.get()).expanduser().with_name(f"{sanitize_name(self.map_name.get())}.sdz"),
                 mode=self.mode.get(),
@@ -313,10 +320,44 @@ class NativeExporterApp:
         self.preview_bounds = image_bounds
         self.preview_canvas.delete("all")
         self.preview_canvas.create_image(0, 0, image=photo, anchor="nw")
-        w, h = PREVIEW_WIDTH, PREVIEW_HEIGHT
-        margin_x, margin_y = int(w * 0.25), int(h * 0.25)
-        self.preview_rect = [margin_x, margin_y, w - margin_x, h - margin_y]
+        self.preview_rect = None
+        self._fit_preview_rect_to_bar_size()
         self._draw_preview_rect()
+
+    def _selected_area_km(self) -> float:
+        try:
+            base_km = float(self.area_km.get())
+        except ValueError:
+            base_km = 4.0
+        try:
+            size = int(self.map_size.get())
+        except ValueError:
+            size = 1024
+        return max(0.2, base_km * (size / 1024))
+
+    def _fit_preview_rect_to_bar_size(self) -> None:
+        if not self.preview_bounds:
+            return
+        west, south, east, north = self.preview_bounds
+        preview_width_km = distance_km(north, west, north, east)
+        preview_height_km = distance_km(north, west, south, west)
+        if preview_width_km <= 0 or preview_height_km <= 0:
+            return
+
+        selected_km = self._selected_area_km()
+        rect_w = min(PREVIEW_WIDTH * 0.92, max(24, PREVIEW_WIDTH * selected_km / preview_width_km))
+        rect_h = min(PREVIEW_HEIGHT * 0.92, max(24, PREVIEW_HEIGHT * selected_km / preview_height_km))
+
+        if self.preview_rect:
+            cx = (self.preview_rect[0] + self.preview_rect[2]) / 2
+            cy = (self.preview_rect[1] + self.preview_rect[3]) / 2
+        else:
+            cx = PREVIEW_WIDTH / 2
+            cy = PREVIEW_HEIGHT / 2
+
+        x0 = min(max(0, cx - rect_w / 2), PREVIEW_WIDTH - rect_w)
+        y0 = min(max(0, cy - rect_h / 2), PREVIEW_HEIGHT - rect_h)
+        self.preview_rect = [x0, y0, x0 + rect_w, y0 + rect_h]
 
     def _draw_preview_rect(self) -> None:
         self.preview_canvas.delete("selection")
@@ -357,13 +398,17 @@ class NativeExporterApp:
             return None
         west, south, east, north = self.preview_bounds
         x0, y0, x1, y1 = self.preview_rect
+        selected_west = west + (east - west) * (x0 / PREVIEW_WIDTH)
+        selected_east = west + (east - west) * (x1 / PREVIEW_WIDTH)
+        selected_north = north + (south - north) * (y0 / PREVIEW_HEIGHT)
+        selected_south = north + (south - north) * (y1 / PREVIEW_HEIGHT)
         return {
-            "west": west + (east - west) * (x0 / PREVIEW_WIDTH),
-            "east": west + (east - west) * (x1 / PREVIEW_WIDTH),
-            "north": north + (south - north) * (y0 / PREVIEW_HEIGHT),
-            "south": north + (south - north) * (y1 / PREVIEW_HEIGHT),
-            "lat": (north + south) / 2,
-            "lon": (west + east) / 2,
+            "west": selected_west,
+            "east": selected_east,
+            "north": selected_north,
+            "south": selected_south,
+            "lat": (selected_north + selected_south) / 2,
+            "lon": (selected_west + selected_east) / 2,
         }
 
 
@@ -491,6 +536,16 @@ def tile_to_latlon(x: int, y: int, zoom: int):
     lon = x / n * 360.0 - 180.0
     lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n))))
     return lon, lat
+
+
+def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_km = 6371.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return 2 * radius_km * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - a)))
 
 
 def export_native_package(config: ExportConfig, status) -> None:
