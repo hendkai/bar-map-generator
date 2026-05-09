@@ -11,6 +11,9 @@ from __future__ import annotations
 import math
 import os
 import random
+import shutil
+import subprocess
+import tarfile
 import tempfile
 import threading
 import time
@@ -27,6 +30,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 )
+PYMAPCONV_LINUX_URL = "https://github.com/Beherith/springrts_smf_compiler/releases/download/v0.6.3/pymapconv.v0.6.3.linux-amd64.tar.gz"
 
 
 class NativeExporterApp:
@@ -43,7 +47,7 @@ class NativeExporterApp:
         self.players = tk.StringVar(value="4")
         self.area_km = tk.StringVar(value="4.0")
         self.height_scale = tk.StringVar(value="1.0")
-        self.output_path = tk.StringVar(value=str(Path.home() / "BAR_native_map_package.zip"))
+        self.output_path = tk.StringVar(value=str(Path.home() / "BAR_native_map.sd7"))
         self.status = tk.StringVar(value="Ready.")
         self.progress = tk.DoubleVar(value=0)
 
@@ -115,13 +119,13 @@ class NativeExporterApp:
         output_frame.columnconfigure(0, weight=1)
         ttk.Entry(output_frame, textvariable=self.output_path).grid(row=0, column=0, sticky="ew", padx=(0, 8))
         ttk.Button(output_frame, text="Browse", command=self._choose_output).grid(row=0, column=1)
-        self._row(grid, row, "Output ZIP", output_frame)
+        self._row(grid, row, "Output .sd7", output_frame)
 
         note = ttk.Label(
             shell,
             text=(
-                "2048 exports can create very large texture files and may take several minutes. "
-                "The window remains responsive while assets are written."
+                "This native exporter generates the source assets, runs PyMapConv, and packages a BAR-loadable .sd7. "
+                "2048 maps can take several minutes and use several GB of temporary disk space."
             ),
             style="Sub.TLabel",
             wraplength=820,
@@ -133,7 +137,7 @@ class NativeExporterApp:
 
         actions = ttk.Frame(shell)
         actions.pack(fill="x")
-        ttk.Button(actions, text="Generate Native ZIP", style="Accent.TButton", command=self._start_export).pack(side="left")
+        ttk.Button(actions, text="Generate Playable .sd7", style="Accent.TButton", command=self._start_export).pack(side="left")
         ttk.Button(actions, text="Open Output Folder", command=self._open_output_folder).pack(side="left", padx=10)
 
         log_frame = ttk.Frame(shell)
@@ -148,8 +152,8 @@ class NativeExporterApp:
     def _choose_output(self) -> None:
         filename = filedialog.asksaveasfilename(
             title="Save BAR map package",
-            defaultextension=".zip",
-            filetypes=(("ZIP package", "*.zip"), ("All files", "*.*")),
+            defaultextension=".sd7",
+            filetypes=(("BAR map", "*.sd7"), ("All files", "*.*")),
             initialfile=Path(self.output_path.get()).name,
         )
         if filename:
@@ -221,6 +225,8 @@ def sanitize_name(value: str) -> str:
 
 
 def export_native_package(config: ExportConfig, status) -> None:
+    if config.output.suffix.lower() != ".sd7":
+        config.output = config.output.with_suffix(".sd7")
     map_units = config.size // 64
     bounds = resolve_bounds(config.location, config.area_km, status)
 
@@ -256,7 +262,7 @@ def export_native_package(config: ExportConfig, status) -> None:
             assets / "splatmap.png"
         )
 
-        status(84, "Writing map config and build scripts...")
+        status(82, "Writing map config and build scripts...")
         (root / "mapinfo.lua").write_text(generate_mapinfo(config, start_positions), encoding="utf-8")
         helper = root / "maphelper"
         helper.mkdir()
@@ -264,14 +270,20 @@ def export_native_package(config: ExportConfig, status) -> None:
         (root / "README.md").write_text(generate_readme(config, bounds, len(features)), encoding="utf-8")
         (root / "build.sh").write_text("#!/usr/bin/env bash\npython3 build_map.py\n", encoding="utf-8")
         (root / "build.bat").write_text("@echo off\r\npython build_map.py\r\n", encoding="utf-8")
-        (root / "build_map.py").write_text(generate_build_stub(config), encoding="utf-8")
+        (root / "build_map.py").write_text(generate_build_script(config), encoding="utf-8")
+        shutil.copy2(Path(__file__), root / "desktop_native.py")
 
-        status(92, "Packaging ZIP...")
+        status(86, "Packaging source ZIP...")
         config.output.parent.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(config.output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=4) as zf:
+        source_zip = config.output.with_name(f"{config.output.stem}_source.zip")
+        with zipfile.ZipFile(source_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=4) as zf:
             for path in root.rglob("*"):
                 if path.is_file():
                     zf.write(path, path.relative_to(root).as_posix())
+
+        status(90, "Compiling playable .sd7 with PyMapConv...")
+        final_sd7 = compile_playable_sd7(root, config, status)
+        shutil.copy2(final_sd7, config.output)
 
 
 def resolve_bounds(location: str, area_km: float, status):
@@ -565,16 +577,137 @@ Native desktop export for Beyond All Reason.
 - Location: {config.location}
 - OSM feature count: {feature_count}
 
-Run `python3 build_map.py` or use PyMapConv manually with the files in `assets/`.
+The native GUI already attempted to create the final `.sd7`. To rebuild from
+this source package, run `python3 build_map.py`.
 """
 
 
-def generate_build_stub(config: ExportConfig) -> str:
+def generate_build_script(config: ExportConfig) -> str:
     return f"""#!/usr/bin/env python3
-print("Native package for {config.map_name} created.")
-print("Use PyMapConv/BAR map compiler with the assets/ folder to build the final .sd7.")
-print("This native exporter avoids browser canvas limits and writes large source assets directly.")
+from desktop_native import compile_playable_sd7, ExportConfig
+from pathlib import Path
+
+cfg = ExportConfig(
+    map_name="{config.map_name}",
+    location="{config.location}",
+    size={config.size},
+    players={config.players},
+    area_km={config.area_km},
+    height_scale={config.height_scale},
+    output=Path("output/{config.map_name}.sd7"),
+)
+Path("output").mkdir(exist_ok=True)
+result = compile_playable_sd7(Path("."), cfg, lambda pct, msg: print(msg))
+cfg.output.write_bytes(result.read_bytes())
+print(f"Created {{cfg.output}}")
 """
+
+
+def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
+    tools_dir = root / "tools"
+    build_dir = root / "build"
+    compiled_maps = build_dir / "compiled" / "maps"
+    map_container = build_dir / f"{config.map_name}.sdd"
+    map_container_maps = map_container / "maps"
+    output_dir = build_dir / "output"
+    output_smf = compiled_maps / f"{config.map_name}.smf"
+    final_sd7 = output_dir / f"{config.map_name}.sd7"
+
+    tools_dir.mkdir(exist_ok=True)
+    compiled_maps.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    pymapconv = ensure_pymapconv(tools_dir, status)
+
+    cmd = [
+        str(pymapconv),
+        "-a",
+        str(root / "assets" / "heightmap.bmp"),
+        "-m",
+        str(root / "assets" / "metalmap.bmp"),
+        "-t",
+        str(root / "assets" / "texture.bmp"),
+        "-l",
+        str(root / "assets" / "normalmap.png"),
+        "-z",
+        str(root / "assets" / "specularmap.png"),
+        "-p",
+        str(root / "assets" / "minimap.png"),
+        "-r",
+        str(root / "assets" / "grassmap.bmp"),
+        "-y",
+        str(root / "assets" / "typemap.bmp"),
+        "-o",
+        str(output_smf),
+    ]
+
+    status(92, "Running PyMapConv...")
+    result = subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=1800)
+    if result.stdout.strip():
+        status(94, result.stdout.strip()[-900:])
+    if result.returncode != 0:
+        raise RuntimeError(f"PyMapConv failed:\n{result.stderr[-1800:] or result.stdout[-1800:]}")
+
+    smf_path = find_file(compiled_maps, ".smf") or output_smf
+    smt_path = find_file(compiled_maps, ".smt")
+    if not smf_path.exists():
+        raise RuntimeError("PyMapConv finished, but no .smf file was produced.")
+    if smt_path is None:
+        smt_path = find_file(root, ".smt")
+    if smt_path is None:
+        raise RuntimeError("PyMapConv finished, but no .smt file was produced.")
+
+    status(97, "Packing Spring/BAR .sd7 container...")
+    if map_container.exists():
+        shutil.rmtree(map_container)
+    map_container_maps.mkdir(parents=True)
+    shutil.copy2(root / "mapinfo.lua", map_container / "mapinfo.lua")
+    shutil.copytree(root / "maphelper", map_container / "maphelper")
+    shutil.copy2(smf_path, map_container_maps / f"{config.map_name}.smf")
+    shutil.copy2(smt_path, map_container_maps / f"{config.map_name}.smt")
+
+    if final_sd7.exists():
+        final_sd7.unlink()
+    with zipfile.ZipFile(final_sd7, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        for path in map_container.rglob("*"):
+            if path.is_file():
+                archive.write(path, path.relative_to(map_container).as_posix())
+
+    if final_sd7.stat().st_size <= 0:
+        raise RuntimeError(".sd7 package was created but is empty.")
+    return final_sd7
+
+
+def ensure_pymapconv(tools_dir: Path, status) -> Path:
+    existing = next(tools_dir.rglob("pymapconv"), None)
+    if existing and existing.is_file():
+        existing.chmod(existing.stat().st_mode | 0o755)
+        return existing
+
+    archive_path = tools_dir / "pymapconv-linux-amd64.tar.gz"
+    status(91, "Downloading PyMapConv...")
+    with requests.get(PYMAPCONV_LINUX_URL, stream=True, timeout=120) as response:
+        response.raise_for_status()
+        with archive_path.open("wb") as handle:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    handle.write(chunk)
+
+    with tarfile.open(archive_path, "r:gz") as tar:
+        tar.extractall(tools_dir)
+
+    executable = next(tools_dir.rglob("pymapconv"), None)
+    if not executable:
+        raise RuntimeError("PyMapConv download completed, but executable was not found.")
+    executable.chmod(executable.stat().st_mode | 0o755)
+    return executable
+
+
+def find_file(root: Path, suffix: str) -> Path | None:
+    for path in root.rglob(f"*{suffix}"):
+        if path.is_file():
+            return path
+    return None
 
 
 def main() -> None:
