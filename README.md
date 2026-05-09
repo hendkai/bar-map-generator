@@ -8,7 +8,7 @@ A web-based tool that generates complete, playable maps for the RTS game Beyond 
 
 **This project is currently in active development and not yet fully functional.**
 
-While the map generation and asset creation works, the automatic compilation system is still being refined. The PyMapConv integration and build scripts are experimental and may not work reliably on all systems.
+While the map generation and asset creation works, the automatic compilation system is still being refined. The generated build scripts now compile SMF/SMT outputs and package them into a BAR-loadable `.sd7` container, but full in-game validation is still needed on target systems.
 
 ## 🎯 Features
 
@@ -82,12 +82,13 @@ All assets are generated with correct dimensions for PyMapConv compatibility:
 1. **PyMapConv Download**: Automatic download of latest release
 2. **Asset Validation**: Format and dimension checking
 3. **Dependency Installation**: Python packages via virtual environment
-4. **Map Compilation**: SMF/SMT generation with error handling
-5. **Package Creation**: Final .sd7 archive
+4. **Map Compilation**: SMF/SMT generation into a Spring/BAR `.sdd` map container
+5. **Package Creation**: Final `.sd7` archive with `mapinfo.lua`, `maphelper/`, and compiled `maps/` files
 
 ## 🐛 Known Issues
 
 - **PyMapConv Integration**: Still experimental, may fail on some systems
+- **In-Game Validation**: Generated `.sd7` files should still be tested in BAR for pathing, resources, starts, and visual readability
 - **Linux Dependencies**: ImageMagick and CompressonatorCLI installation needed
 - **Temp File Handling**: Threading issues with PyMapConv on some configurations
 - **Asset Format Compatibility**: Some format conversions may not work perfectly

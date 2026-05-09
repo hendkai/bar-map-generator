@@ -3133,6 +3133,11 @@ MAP_NAME = "${mapName}"
 TOOLS_DIR = "tools"
 OUTPUT_DIR = "output"
 ASSETS_DIR = "assets"
+BUILD_DIR = "build"
+MAP_CONTAINER_DIR = os.path.join(BUILD_DIR, MAP_NAME + ".sdd")
+COMPILED_MAPS_DIR = os.path.join(MAP_CONTAINER_DIR, "maps")
+FINAL_SD7_PATH = os.path.join(OUTPUT_DIR, MAP_NAME + ".sd7")
+COMPILED_SMF_PATH = os.path.join(COMPILED_MAPS_DIR, MAP_NAME + ".smf")
 
 # PyMapConv URLs (Beherith's modern map compiler)
 PYMAPCONV_URLS = {
@@ -3583,12 +3588,87 @@ def find_pymapconv():
     
     return None
 
+def prepare_map_container():
+    """Create the Spring/BAR map container that will be packed into .sd7"""
+    print("📦 Bereite Map-Container vor...")
+    if os.path.exists(MAP_CONTAINER_DIR):
+        shutil.rmtree(MAP_CONTAINER_DIR, ignore_errors=True)
+
+    os.makedirs(COMPILED_MAPS_DIR, exist_ok=True)
+    os.makedirs(os.path.join(MAP_CONTAINER_DIR, "maphelper"), exist_ok=True)
+
+    if not os.path.exists("mapinfo.lua"):
+        print("❌ mapinfo.lua fehlt im Paket")
+        return False
+
+    shutil.copy2("mapinfo.lua", os.path.join(MAP_CONTAINER_DIR, "mapinfo.lua"))
+
+    source_helper = os.path.join("maphelper", "maphelper.lua")
+    target_helper = os.path.join(MAP_CONTAINER_DIR, "maphelper", "maphelper.lua")
+    if os.path.exists(source_helper):
+        shutil.copy2(source_helper, target_helper)
+    else:
+        with open(target_helper, "w", encoding="utf-8") as f:
+            f.write("-- Generated fallback maphelper\\nreturn {}\\n")
+
+    return True
+
+def find_compiled_smt():
+    expected = os.path.splitext(COMPILED_SMF_PATH)[0] + ".smt"
+    if os.path.exists(expected):
+        return expected
+
+    for root, dirs, files in os.walk(COMPILED_MAPS_DIR):
+        for file in files:
+            if file.lower().endswith(".smt"):
+                return os.path.join(root, file)
+
+    return None
+
+def compiled_outputs_exist():
+    smt_path = find_compiled_smt()
+    if not os.path.exists(COMPILED_SMF_PATH):
+        print(f"❌ Kompilierte SMF fehlt: {COMPILED_SMF_PATH}")
+        return False
+    if not smt_path:
+        print("❌ Kompilierte SMT fehlt")
+        return False
+
+    print(f"✅ SMF gefunden: {COMPILED_SMF_PATH}")
+    print(f"✅ SMT gefunden: {smt_path}")
+    return True
+
+def package_sd7():
+    """Pack the compiled .sdd container into a BAR-loadable .sd7 archive"""
+    print("📦 Packe finale .sd7 Map...")
+    if not compiled_outputs_exist():
+        return False
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    if os.path.exists(FINAL_SD7_PATH):
+        os.remove(FINAL_SD7_PATH)
+
+    with zipfile.ZipFile(FINAL_SD7_PATH, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for root, dirs, files in os.walk(MAP_CONTAINER_DIR):
+            for file in files:
+                full_path = os.path.join(root, file)
+                archive_name = os.path.relpath(full_path, MAP_CONTAINER_DIR).replace(os.sep, "/")
+                archive.write(full_path, archive_name)
+
+    if os.path.exists(FINAL_SD7_PATH) and os.path.getsize(FINAL_SD7_PATH) > 0:
+        print(f"✅ Finale BAR Map erstellt: {FINAL_SD7_PATH}")
+        return True
+
+    print("❌ .sd7 Archiv wurde nicht erstellt")
+    return False
+
 def run_pymapconv(pymapconv_path):
     """Run PyMapConv to compile the map"""
     print("🔨 Kompiliere Map mit PyMapConv...")
     
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
+    os.makedirs(COMPILED_MAPS_DIR, exist_ok=True)
     
     # Create temp directories that PyMapConv needs with proper permissions
     temp_dirs = ["temp", "temp/thread0", "temp/thread1", "temp/thread2", "temp/thread3"]
@@ -3643,8 +3723,8 @@ def run_pymapconv(pymapconv_path):
     is_python_script = pymapconv_path.endswith('.py')
     is_executable = pymapconv_path.endswith(('pymapconv.exe', 'pymapconv'))
     
-    # PyMapConv command - uses GUI mode with batch file input
-    output_path = os.path.join(OUTPUT_DIR, MAP_NAME + ".sd7")
+    # PyMapConv creates .smf/.smt. The .sd7 is packed afterwards.
+    output_path = COMPILED_SMF_PATH
     
     if is_python_script:
         # Check if virtual environment exists
@@ -3704,11 +3784,11 @@ def run_pymapconv(pymapconv_path):
         
         if result.returncode == 0:
             print("✅ Map erfolgreich kompiliert!")
-            if os.path.exists(output_path):
+            if compiled_outputs_exist():
                 print(f"📁 Output: {output_path}")
                 return True
             else:
-                print("⚠️  PyMapConv erfolgreich, aber Ausgabedatei nicht gefunden")
+                print("⚠️  PyMapConv erfolgreich, aber SMF/SMT Ausgabe nicht vollständig gefunden")
                 return False
         else:
             print("❌ PyMapConv Fehler:")
@@ -3799,7 +3879,7 @@ def run_pymapconv_python(pymapconv_path):
         python_executable = sys.executable
         print("🐍 Verwende System-Python")
     
-    output_path = os.path.join(OUTPUT_DIR, MAP_NAME + ".sd7")
+    output_path = COMPILED_SMF_PATH
     
     cmd = [
         python_executable, pymapconv_path,
@@ -3819,7 +3899,7 @@ def run_pymapconv_python(pymapconv_path):
         print(f"🔧 Python-Kommando: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         
-        if os.path.exists(output_path):
+        if compiled_outputs_exist():
             print("✅ Map erfolgreich mit Python-Script kompiliert!")
             print(f"📁 Output: {output_path}")
             return True
@@ -3849,7 +3929,7 @@ def run_pymapconv_simple(pymapconv_path):
         else:
             python_executable = sys.executable
     
-    output_path = os.path.join(OUTPUT_DIR, MAP_NAME + ".sd7")
+    output_path = COMPILED_SMF_PATH
     
     # Try with only essential parameters and skip texture processing
     if is_python_script:
@@ -3873,7 +3953,7 @@ def run_pymapconv_simple(pymapconv_path):
         print(f"🔧 Vereinfachtes Kommando: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         
-        if os.path.exists(output_path):
+        if compiled_outputs_exist():
             print("✅ Map erfolgreich kompiliert (vereinfachte Methode)!")
             print(f"📁 Output: {output_path}")
             return True
@@ -3891,7 +3971,7 @@ def install_map():
     """Copy compiled map to BAR directory"""
     print("📥 Installiere Map in BAR...")
     
-    map_file = os.path.join(OUTPUT_DIR, MAP_NAME + ".sd7")
+    map_file = FINAL_SD7_PATH
     if not os.path.exists(map_file):
         print("❌ Kompilierte Map nicht gefunden!")
         return False
@@ -3929,6 +4009,9 @@ def main():
     if not os.path.exists(ASSETS_DIR):
         print("❌ Assets Ordner nicht gefunden!")
         print("   Stelle sicher, dass du das komplette Paket extrahiert hast.")
+        return 1
+
+    if not prepare_map_container():
         return 1
     
     # Detect OS
@@ -3978,13 +4061,18 @@ def main():
         print("📄 Map-Konfiguration: mapinfo.lua")
         print("\\n💡 Tipp: PyMapConv hat eine GUI - das könnte einfacher sein!")
         return 1
+
+    if not package_sd7():
+        print("\\n❌ .sd7 Paketierung fehlgeschlagen!")
+        print(f"   Der kompilierte Container liegt hier: {MAP_CONTAINER_DIR}")
+        return 1
     
     # Install map
     install_map()
     
     print("\\n🎉 Map-Generation abgeschlossen!")
     print(f"   Map Name: {MAP_NAME}")
-    print(f"   Datei: {os.path.join(OUTPUT_DIR, MAP_NAME + '.sd7')}")
+    print(f"   Datei: {FINAL_SD7_PATH}")
     print("\\n🎮 Starte BAR und wähle deine neue Map aus!")
     
     return 0
@@ -5371,6 +5459,7 @@ https://github.com/beyond-all-reason/bar-map-generator
 
             // Add mapinfo.lua (root level for MapConv)
             zip.file("mapinfo.lua", assets.mapinfo);
+            zip.folder("maphelper").file("maphelper.lua", assets.maphelper);
 
             // Convert canvases to blobs with correct formats for PyMapConv
             const heightmapBlob = await canvasToBlob(assets.heightmap, 'image/bmp');
