@@ -589,7 +589,20 @@
             z-index: 1;
         }
 
-        #osmMap .leaflet-overlay-pane path {
+        #osmMap .leaflet-canvas-pane canvas {
+            border: 0;
+            border-radius: 0;
+            max-width: none;
+            margin: 0;
+        }
+
+        #osmMap .leaflet-overlay-pane svg {
+            z-index: 450;
+        }
+
+        #osmMap .leaflet-overlay-pane path,
+        #osmMap .leaflet-pane .leaflet-interactive,
+        #osmMap .leaflet-draw-shape {
             stroke: #ff3b30 !important;
             stroke-width: 4px !important;
             stroke-opacity: 1 !important;
@@ -600,6 +613,11 @@
 
         #osmMap .leaflet-draw-guide-dash {
             background: #ff3b30 !important;
+            opacity: 1 !important;
+        }
+
+        #osmMap .leaflet-draw-tooltip {
+            display: none;
         }
 
         .osm-sidebar {
@@ -752,9 +770,9 @@
                 <h3>Map Basics</h3>
                 <label>Map Size:
                     <select id="mapSize">
-                        <option value="512">512x512 (Small)</option>
-                        <option value="1024" selected>1024x1024 (Medium)</option>
-                        <option value="2048">2048x2048 (Large)</option>
+                        <option value="512" selected>512x512 (Small, downloadable)</option>
+                        <option value="1024">1024x1024 (Medium preview)</option>
+                        <option value="2048">2048x2048 (Large preview)</option>
                     </select>
                 </label>
 
@@ -899,9 +917,9 @@
 
                     <label>BAR Map Size:
                         <select id="osmMapSize">
-                            <option value="512">512x512 (Small)</option>
-                            <option value="1024" selected>1024x1024 (Medium)</option>
-                            <option value="2048">2048x2048 (Large)</option>
+                            <option value="512" selected>512x512 (Small, downloadable)</option>
+                            <option value="1024">1024x1024 (Medium preview)</option>
+                            <option value="2048">2048x2048 (Large preview)</option>
                         </select>
                     </label>
 
@@ -977,6 +995,7 @@
         let osmMap = null;
         let osmDrawLayer = null;
         let osmSelectedBounds = null;
+        let osmWorker = null;
         const OSM_MASK_SIZE = 512;
         const OSM_SELECTION_STYLE = {
             color: '#ff3b30',
@@ -1006,7 +1025,7 @@
             if (osmMap) return;
 
             osmDrawLayer = new L.FeatureGroup();
-            osmMap = L.map('osmMap', { preferCanvas: true }).setView([52.52, 13.405], 11);
+            osmMap = L.map('osmMap', { preferCanvas: false }).setView([52.52, 13.405], 11);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; OpenStreetMap contributors'
@@ -1208,7 +1227,9 @@
 
                 await paintOsmProgress(78, 'Building BAR heightmap and texture...');
                 setOsmStatus('Projecting OSM and elevation data into BAR terrain...', 'loading');
-                const generated = await buildTerrainFromOsm(osmSelectedBounds, osmFeatures, elevationGrid, paintOsmProgress);
+                const featureMask = rasterizeOsmFeatures(osmSelectedBounds, osmFeatures, OSM_MASK_SIZE);
+                const generated = await buildTerrainFromOsmInWorker(osmSelectedBounds, featureMask, elevationGrid);
+                generated.featureMask = featureMask;
 
                 heightmapData = generated.heightmap;
                 textureData = generated.texture;
@@ -1276,6 +1297,73 @@
             } catch (error) {
                 throw new Error('Overpass API did not return JSON. Try a smaller selection or retry later.');
             }
+        }
+
+        function boundsToPlainObject(bounds) {
+            return {
+                south: bounds.getSouth(),
+                west: bounds.getWest(),
+                north: bounds.getNorth(),
+                east: bounds.getEast()
+            };
+        }
+
+        function buildTerrainFromOsmInWorker(bounds, featureMask, elevationGrid) {
+            if (osmWorker) {
+                osmWorker.terminate();
+            }
+
+            return new Promise((resolve, reject) => {
+                osmWorker = new Worker('osm-worker.js');
+
+                osmWorker.onmessage = function (event) {
+                    const data = event.data;
+
+                    if (data.type === 'progress') {
+                        updateOsmProgress(data.percent, data.message);
+                        return;
+                    }
+
+                    if (data.type === 'complete') {
+                        osmWorker.terminate();
+                        osmWorker = null;
+                        resolve(data);
+                        return;
+                    }
+
+                    if (data.type === 'error') {
+                        osmWorker.terminate();
+                        osmWorker = null;
+                        reject(new Error(data.message));
+                    }
+                };
+
+                osmWorker.onerror = function (error) {
+                    osmWorker.terminate();
+                    osmWorker = null;
+                    reject(new Error(error.message || 'OSM worker failed.'));
+                };
+
+                const plainBounds = boundsToPlainObject(bounds);
+                osmWorker.postMessage({
+                    bounds: plainBounds,
+                    featureMask: {
+                        width: featureMask.width,
+                        height: featureMask.height,
+                        data: featureMask.data
+                    },
+                    elevationGrid,
+                    config: {
+                        size: parseInt(document.getElementById('osmMapSize').value),
+                        playerCount: parseInt(document.getElementById('osmPlayerCount').value),
+                        heightScale: parseFloat(document.getElementById('osmHeightScale').value),
+                        metalSpots: parseInt(document.getElementById('metalSpots').value),
+                        metalStrength: parseFloat(document.getElementById('metalStrength').value),
+                        geoSpots: parseInt(document.getElementById('geoSpots').value),
+                        seed: Math.floor(Math.abs((plainBounds.north + plainBounds.west) * 1000000)) || Date.now()
+                    }
+                });
+            });
         }
 
         async function fetchElevationGrid(bounds, gridSize, onProgress = null) {
@@ -3073,6 +3161,15 @@
         async function downloadCompleteMapPackage() {
             if (!heightmapData) {
                 alert('Please generate a map first!');
+                return;
+            }
+
+            if (mapConfig.size > 512) {
+                alert(
+                    'Complete browser ZIP export is currently limited to 512x512 maps. ' +
+                    '1024x1024 and 2048x2048 packages require very large BAR texture/normalmap canvases ' +
+                    'and can freeze the browser before the download starts. Please select 512x512, regenerate the map, and download again.'
+                );
                 return;
             }
 
