@@ -31,14 +31,16 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
 )
 PYMAPCONV_LINUX_URL = "https://github.com/Beherith/springrts_smf_compiler/releases/download/v0.6.3/pymapconv.v0.6.3.linux-amd64.tar.gz"
+PREVIEW_WIDTH = 760
+PREVIEW_HEIGHT = 460
 
 
 class NativeExporterApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("BAR Map Generator - Native Desktop Exporter")
-        self.root.geometry("1280x900")
-        self.root.minsize(1120, 820)
+        self.root.geometry("1500x1040")
+        self.root.minsize(1280, 900)
         self.worker: threading.Thread | None = None
         self.preview_image = None
         self.preview_bounds = None
@@ -202,7 +204,14 @@ class NativeExporterApp:
         preview_frame = ttk.Frame(shell)
         preview_frame.pack(fill="x", pady=(16, 0))
         ttk.Label(preview_frame, text="OSM selection preview", style="Sub.TLabel").pack(anchor="w")
-        self.preview_canvas = tk.Canvas(preview_frame, width=420, height=260, bg="#111923", highlightthickness=1, highlightbackground="#314455")
+        self.preview_canvas = tk.Canvas(
+            preview_frame,
+            width=PREVIEW_WIDTH,
+            height=PREVIEW_HEIGHT,
+            bg="#111923",
+            highlightthickness=1,
+            highlightbackground="#314455",
+        )
         self.preview_canvas.pack(anchor="w", pady=(6, 0))
         self.preview_canvas.bind("<ButtonPress-1>", self._preview_press)
         self.preview_canvas.bind("<B1-Motion>", self._preview_drag_motion)
@@ -290,8 +299,8 @@ class NativeExporterApp:
         self.preview_bounds = image_bounds
         self.preview_canvas.delete("all")
         self.preview_canvas.create_image(0, 0, image=photo, anchor="nw")
-        w, h = 420, 260
-        margin_x, margin_y = 105, 65
+        w, h = PREVIEW_WIDTH, PREVIEW_HEIGHT
+        margin_x, margin_y = int(w * 0.25), int(h * 0.25)
         self.preview_rect = [margin_x, margin_y, w - margin_x, h - margin_y]
         self._draw_preview_rect()
 
@@ -321,8 +330,8 @@ class NativeExporterApp:
         dx, dy = event.x - sx, event.y - sy
         width = rect[2] - rect[0]
         height = rect[3] - rect[1]
-        x0 = min(max(0, rect[0] + dx), 420 - width)
-        y0 = min(max(0, rect[1] + dy), 260 - height)
+        x0 = min(max(0, rect[0] + dx), PREVIEW_WIDTH - width)
+        y0 = min(max(0, rect[1] + dy), PREVIEW_HEIGHT - height)
         self.preview_rect = [x0, y0, x0 + width, y0 + height]
         self._draw_preview_rect()
 
@@ -335,10 +344,10 @@ class NativeExporterApp:
         west, south, east, north = self.preview_bounds
         x0, y0, x1, y1 = self.preview_rect
         return {
-            "west": west + (east - west) * (x0 / 420),
-            "east": west + (east - west) * (x1 / 420),
-            "north": north + (south - north) * (y0 / 260),
-            "south": north + (south - north) * (y1 / 260),
+            "west": west + (east - west) * (x0 / PREVIEW_WIDTH),
+            "east": west + (east - west) * (x1 / PREVIEW_WIDTH),
+            "north": north + (south - north) * (y0 / PREVIEW_HEIGHT),
+            "south": north + (south - north) * (y1 / PREVIEW_HEIGHT),
             "lat": (north + south) / 2,
             "lon": (west + east) / 2,
         }
@@ -447,7 +456,7 @@ def load_osm_preview_image(bounds):
                     image.paste(tile, ((dx + 1) * tile_size, (dy + 1) * tile_size))
             except Exception:
                 pass
-    preview = image.resize((420, 260), Image.Resampling.BILINEAR)
+    preview = image.resize((PREVIEW_WIDTH, PREVIEW_HEIGHT), Image.Resampling.BILINEAR)
     west, north = tile_to_latlon(center_x - 1, center_y - 1, zoom)
     east, south = tile_to_latlon(center_x + 2, center_y + 2, zoom)
     return preview, (west, south, east, north)
@@ -865,6 +874,7 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     output_dir = build_dir / "output"
     output_smf = compiled_maps / f"{config.map_name}.smf"
     final_sd7 = output_dir / f"{config.map_name}.sd7"
+    log_path = config.output.with_suffix(".pymapconv.log")
 
     tools_dir.mkdir(exist_ok=True)
     compiled_maps.mkdir(parents=True, exist_ok=True)
@@ -896,10 +906,13 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
 
     status(92, "Running PyMapConv...")
     result = subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=1800)
-    if result.stdout.strip():
-        status(94, result.stdout.strip()[-900:])
+    write_pymapconv_log(log_path, cmd, result)
+    combined_output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
+    if combined_output:
+        status(94, f"PyMapConv output written to {log_path}\n{combined_output[-1600:]}")
     if result.returncode != 0:
-        raise RuntimeError(f"PyMapConv failed:\n{result.stderr[-1800:] or result.stdout[-1800:]}")
+        details = combined_output[-2200:] or "No stdout/stderr was produced."
+        raise RuntimeError(f"PyMapConv failed with exit code {result.returncode}. Full log: {log_path}\n{details}")
 
     smf_path = find_file(compiled_maps, ".smf") or output_smf
     smt_path = find_file(compiled_maps, ".smt")
@@ -954,6 +967,27 @@ def ensure_pymapconv(tools_dir: Path, status) -> Path:
         raise RuntimeError("PyMapConv download completed, but executable was not found.")
     executable.chmod(executable.stat().st_mode | 0o755)
     return executable
+
+
+def write_pymapconv_log(log_path: Path, cmd: list[str], result: subprocess.CompletedProcess[str]) -> None:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        "\n".join(
+            [
+                "BAR Native Map Generator - PyMapConv log",
+                f"Command: {' '.join(cmd)}",
+                f"Exit code: {result.returncode}",
+                "",
+                "STDOUT:",
+                result.stdout or "",
+                "",
+                "STDERR:",
+                result.stderr or "",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
 
 def find_file(root: Path, suffix: str) -> Path | None:
