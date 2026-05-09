@@ -37,8 +37,8 @@ class NativeExporterApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("BAR Map Generator - Native Desktop Exporter")
-        self.root.geometry("920x720")
-        self.root.minsize(820, 620)
+        self.root.geometry("1280x900")
+        self.root.minsize(1120, 820)
         self.worker: threading.Thread | None = None
         self.preview_image = None
         self.preview_bounds = None
