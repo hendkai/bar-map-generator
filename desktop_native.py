@@ -31,16 +31,16 @@ OVERPASS_ENDPOINTS = (
     "https://overpass.kumi.systems/api/interpreter",
 )
 PYMAPCONV_LINUX_URL = "https://github.com/Beherith/springrts_smf_compiler/releases/download/v0.6.3/pymapconv.v0.6.3.linux-amd64.tar.gz"
-PREVIEW_WIDTH = 760
-PREVIEW_HEIGHT = 460
+PREVIEW_WIDTH = 1200
+PREVIEW_HEIGHT = 720
 
 
 class NativeExporterApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("BAR Map Generator - Native Desktop Exporter")
-        self.root.geometry("1500x1040")
-        self.root.minsize(1280, 900)
+        self.root.geometry("1720x1220")
+        self.root.minsize(1420, 980)
         self.worker: threading.Thread | None = None
         self.preview_image = None
         self.preview_bounds = None
@@ -881,6 +881,7 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     pymapconv = ensure_pymapconv(tools_dir, status)
+    prepare_pymapconv_runtime(root)
 
     cmd = [
         str(pymapconv),
@@ -967,6 +968,20 @@ def ensure_pymapconv(tools_dir: Path, status) -> Path:
         raise RuntimeError("PyMapConv download completed, but executable was not found.")
     executable.chmod(executable.stat().st_mode | 0o755)
     return executable
+
+
+def prepare_pymapconv_runtime(root: Path) -> None:
+    temp_dir = root / "temp"
+    temp_dir.mkdir(exist_ok=True)
+    # PyMapConv writes intermediate tiles to relative temp/threadN paths.
+    for idx in range(1, 17):
+        (temp_dir / f"thread{idx}").mkdir(parents=True, exist_ok=True)
+
+    resources_dir = root / "resources"
+    resources_dir.mkdir(exist_ok=True)
+    geovent = resources_dir / "geovent.bmp"
+    if not geovent.exists():
+        Image.new("RGB", (64, 64), (128, 128, 128)).save(geovent)
 
 
 def write_pymapconv_log(log_path: Path, cmd: list[str], result: subprocess.CompletedProcess[str]) -> None:
