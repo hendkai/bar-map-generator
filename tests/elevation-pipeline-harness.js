@@ -43,7 +43,8 @@ function loadBrowserElevationFunctions(fetchImpl) {
             createSyntheticElevationGrid,
             createElevationGrid,
             formatElevationGridStatus,
-            createElevationCacheKey
+            createElevationCacheKey,
+            getElevationGridSize
         };
     `, sandbox, { filename: 'bar_map_generator.html:elevation' });
     return { api: sandbox.__exports, progress };
@@ -75,10 +76,42 @@ function loadWorkerFunctions() {
         globalThis.__exports = {
             buildTerrainFromOsmWorker,
             normalizeElevationMetadata,
-            sampleElevation
+            sampleElevation,
+            computeReliefProfile,
+            measureAmplitude
         };
     `, sandbox, { filename: 'osm-worker.js' });
-    return { api: sandbox.__exports, messages };
+    return { api: sandbox.__exports, messages, worker: sandbox.self };
+}
+
+function loadBrowserExportFunctions() {
+    const html = fs.readFileSync('bar_map_generator.html', 'utf8');
+    const script = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+        .map(match => match[1])
+        .find(text => text.includes('function generatePythonBuildScript'));
+    const start = script.indexOf('function generatePythonBuildScript');
+    const helperStart = script.indexOf('function generateBARMapInfo');
+    const helperEnd = script.indexOf('function generateBARMapHelper');
+    const code = `${script.slice(start, script.indexOf('function generateBatchScript'))}
+${script.slice(helperStart, helperEnd)}`;
+    const sandbox = {
+        Number,
+        Math,
+        Date,
+        Blob: function () {},
+        mapConfig: null,
+        resourceData: { metalSpots: [], geoSpots: [] },
+        globalThis: null
+    };
+    sandbox.globalThis = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(`${code}
+        globalThis.__exports = {
+            generatePythonBuildScript,
+            generateBARMapInfo
+        };
+    `, sandbox, { filename: 'bar_map_generator.html:export' });
+    return sandbox;
 }
 
 async function testBrowserOpenMeteoSuccess() {
@@ -106,6 +139,8 @@ async function testBrowserOpenMeteoSuccess() {
     assert.deepStrictEqual({ ...grid.metadata.bounds }, { south: 10, west: 20, north: 11, east: 22 });
     assert.strictEqual(grid.metadata.cacheKey, 'open-meteo:10.000000:20.000000:11.000000:22.000000:2x2');
     assert.match(api.formatElevationGridStatus(grid), /Open-Meteo Elevation API real API elevation/);
+    assert.strictEqual(api.getElevationGridSize(10), 64);
+    assert.strictEqual(api.getElevationGridSize(30), 48);
 }
 
 async function testBrowserFallbacks() {
@@ -155,7 +190,7 @@ async function testBrowserFallbacks() {
 }
 
 async function testWorkerUsesElevationAndPassesMetadata() {
-    const { api } = loadWorkerFunctions();
+    const { api, messages, worker } = loadWorkerFunctions();
     assert.strictEqual(api.sampleElevation({
         gridWidth: 3,
         gridHeight: 2,
@@ -187,13 +222,168 @@ async function testWorkerUsesElevationAndPassesMetadata() {
 
     assert.deepStrictEqual({ ...generated.elevationMetadata }, metadata);
     assert.deepStrictEqual({ ...generated.config.elevationMetadata }, metadata);
+    assert.strictEqual(generated.config.reliefSource, 'real');
+    assert.strictEqual(generated.config.elevationSpanMeters, 300);
+    assert(Number.isFinite(generated.config.compileMinHeight));
+    assert(Number.isFinite(generated.config.compileMaxHeight));
     assert(generated.heightmap[generated.heightmap.length - 1] > generated.heightmap[0]);
+
+    await worker.onmessage({
+        data: {
+            bounds: { south: 10, west: 20, north: 11, east: 22 },
+            featureMask,
+            elevationGrid: { gridWidth: 2, gridHeight: 2, values: [0, 100, 200, 300], metadata },
+            config: { size: 8, playerCount: 2, heightScale: 1, metalSpots: 0, metalStrength: 1, geoSpots: 0, seed: 1 }
+        }
+    });
+    const complete = messages.find(message => message.type === 'complete');
+    assert(complete.reliefProfile);
+    assert.strictEqual(complete.reliefProfile.source, 'real');
+}
+
+async function testReliefAmplitudeAndSmallSpanCompileRange() {
+    const { api } = loadWorkerFunctions();
+    const featureMask = {
+        width: 2,
+        height: 2,
+        data: new Uint8ClampedArray(2 * 2 * 4)
+    };
+    const baseConfig = { size: 32, playerCount: 2, heightScale: 2.5, metalSpots: 0, metalStrength: 1, geoSpots: 0, seed: 1 };
+    const realMeta = (min, max) => ({
+        source: 'open-meteo',
+        providerName: 'Open-Meteo Elevation API',
+        gridWidth: 4,
+        gridHeight: 4,
+        sampleCount: 16,
+        minElevationMeters: min,
+        maxElevationMeters: max,
+        synthetic: false,
+        estimatedResolutionMetersX: 80,
+        estimatedResolutionMetersY: 80
+    });
+    const flat = await api.buildTerrainFromOsmWorker(
+        {},
+        featureMask,
+        { gridWidth: 4, gridHeight: 4, values: new Array(16).fill(100), metadata: realMeta(100, 100) },
+        baseConfig
+    );
+    const mountainous = await api.buildTerrainFromOsmWorker(
+        {},
+        featureMask,
+        { gridWidth: 4, gridHeight: 4, values: Array.from({ length: 16 }, (_, i) => 100 + i * (800 / 15)), metadata: realMeta(100, 900) },
+        baseConfig
+    );
+    const hillyProfile = api.computeReliefProfile(
+        { gridWidth: 4, gridHeight: 4, values: [180, 210, 230, 260], metadata: realMeta(180, 260) },
+        { heightScale: 2.5, waterLevel: 58 }
+    );
+
+    assert(api.measureAmplitude(mountainous.heightmap) > api.measureAmplitude(flat.heightmap) + 90);
+    assert(api.measureAmplitude(flat.heightmap) < 20, `flat real terrain was amplified to ${api.measureAmplitude(flat.heightmap)}`);
+    assert(hillyProfile.compileHeightRange >= 220);
+    assert.strictEqual(hillyProfile.compileMaxHeight, 220);
+}
+
+async function testWaterCarvingAndReliefPreservation() {
+    const { api } = loadWorkerFunctions();
+    const dryMask = { width: 2, height: 2, data: new Uint8ClampedArray(2 * 2 * 4) };
+    const waterwayMaskData = new Uint8ClampedArray(2 * 2 * 4);
+    waterwayMaskData[(3 * 4) + 1] = 128;
+    waterwayMaskData[(3 * 4) + 2] = 255;
+    const waterwayMask = { width: 2, height: 2, data: waterwayMaskData };
+    const waterBodyMaskData = new Uint8ClampedArray(2 * 2 * 4);
+    waterBodyMaskData[(3 * 4) + 2] = 255;
+    const waterBodyMask = { width: 2, height: 2, data: waterBodyMaskData };
+    const metadata = {
+        source: 'open-meteo',
+        gridWidth: 4,
+        gridHeight: 4,
+        sampleCount: 16,
+        minElevationMeters: 100,
+        maxElevationMeters: 900,
+        synthetic: false,
+        estimatedResolutionMetersX: 80,
+        estimatedResolutionMetersY: 80
+    };
+    const grid = { gridWidth: 4, gridHeight: 4, values: Array.from({ length: 16 }, (_, i) => 100 + i * (800 / 15)), metadata };
+    const config = { size: 32, playerCount: 2, heightScale: 2.5, metalSpots: 0, metalStrength: 1, geoSpots: 0, seed: 1 };
+    const dry = await api.buildTerrainFromOsmWorker({}, dryMask, grid, config);
+    const waterway = await api.buildTerrainFromOsmWorker({}, waterwayMask, grid, config);
+    const waterBody = await api.buildTerrainFromOsmWorker({}, waterBodyMask, grid, config);
+    const amplitudeRatio = api.measureAmplitude(waterBody.heightmap) / api.measureAmplitude(dry.heightmap);
+    const carved = dry.heightmap[dry.heightmap.length - 1] - waterway.heightmap[waterway.heightmap.length - 1];
+
+    assert(amplitudeRatio > 0.75, `water collapsed relief ratio to ${amplitudeRatio}`);
+    assert(carved > 0 && carved < 40, `waterway carving depth was ${carved}`);
+    assert(waterBody.heightmap[waterBody.heightmap.length - 1] <= waterBody.config.waterLevel);
+}
+
+async function testHighTerrainWaterBodyPreservesGlobalRelief() {
+    const { api } = loadWorkerFunctions();
+    const dryMask = { width: 4, height: 4, data: new Uint8ClampedArray(4 * 4 * 4) };
+    const highWaterMaskData = new Uint8ClampedArray(4 * 4 * 4);
+    for (let y = 2; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+            highWaterMaskData[((y * 4 + x) * 4) + 2] = 255;
+        }
+    }
+    const highWaterMask = { width: 4, height: 4, data: highWaterMaskData };
+    const metadata = {
+        source: 'open-meteo',
+        gridWidth: 4,
+        gridHeight: 4,
+        sampleCount: 16,
+        minElevationMeters: 100,
+        maxElevationMeters: 900,
+        synthetic: false,
+        estimatedResolutionMetersX: 80,
+        estimatedResolutionMetersY: 80
+    };
+    const grid = {
+        gridWidth: 4,
+        gridHeight: 4,
+        values: Array.from({ length: 16 }, (_, i) => 100 + i * (800 / 15)),
+        metadata
+    };
+    const config = { size: 32, playerCount: 2, heightScale: 2.5, metalSpots: 0, metalStrength: 1, geoSpots: 0, seed: 1 };
+    const dry = await api.buildTerrainFromOsmWorker({}, dryMask, grid, config);
+    const highWater = await api.buildTerrainFromOsmWorker({}, highWaterMask, grid, config);
+    const amplitudeRatio = api.measureAmplitude(highWater.heightmap) / api.measureAmplitude(dry.heightmap);
+
+    assert(amplitudeRatio > 0.75, `high-terrain water collapsed relief ratio to ${amplitudeRatio}`);
+    assert(highWater.heightmap[highWater.heightmap.length - 1] <= highWater.config.waterLevel);
+}
+
+function testBrowserExportHeightBounds() {
+    const sandbox = loadBrowserExportFunctions();
+    sandbox.mapConfig = {
+        size: 1024,
+        terrainType: 'osm',
+        playerCount: 2,
+        waterLevel: 58,
+        heightVariation: 999,
+        compileMinHeight: -25,
+        compileMaxHeight: 307.95,
+        startPositions: [{ x: 128, y: 128 }, { x: 896, y: 896 }]
+    };
+    const script = sandbox.__exports.generatePythonBuildScript('relief_test');
+    const mapinfo = sandbox.__exports.generateBARMapInfo();
+
+    assert.match(script, /COMPILE_MIN_HEIGHT = -25\.00/);
+    assert.match(script, /COMPILE_MAX_HEIGHT = 307\.95/);
+    assert.match(script, /"-x", f"\{COMPILE_MAX_HEIGHT:\.2f\}", "-n", f"\{COMPILE_MIN_HEIGHT:\.2f\}"/);
+    assert.match(mapinfo, /minheight = -25/);
+    assert.match(mapinfo, /maxheight = 307\.95/);
 }
 
 (async () => {
     await testBrowserOpenMeteoSuccess();
     await testBrowserFallbacks();
     await testWorkerUsesElevationAndPassesMetadata();
+    await testReliefAmplitudeAndSmallSpanCompileRange();
+    await testWaterCarvingAndReliefPreservation();
+    await testHighTerrainWaterBodyPreservesGlobalRelief();
+    testBrowserExportHeightBounds();
     console.log('elevation-pipeline-harness: all assertions passed');
 })().catch(error => {
     console.error(error);

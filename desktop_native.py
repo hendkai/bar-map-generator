@@ -439,6 +439,8 @@ class ExportConfig:
         self.bar_maps_dir = bar_maps_dir
         self.compile_min_height = -80.0
         self.compile_max_height = 360.0
+        self.elevation_span_meters = 0.0
+        self.relief_source = "unknown"
 
 
 def sanitize_name(value: str) -> str:
@@ -803,6 +805,8 @@ def generate_base_maps(config: ExportConfig, bounds, elevation, features):
     height_range = max(220.0, min(1400.0, span * config.height_scale))
     config.compile_min_height = -max(25.0, height_range * 0.08)
     config.compile_max_height = height_range
+    config.elevation_span_meters = span
+    config.relief_source = "real" if metadata.get("source") == "open-meteo" else metadata.get("source", "unknown")
     mask = rasterize_features(config, bounds, features)
     height_img = Image.new("L", (size, size))
     tex = Image.new("RGB", (size, size))
