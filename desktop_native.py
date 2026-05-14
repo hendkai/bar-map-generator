@@ -9,6 +9,7 @@ thread.
 from __future__ import annotations
 
 import math
+import json
 import os
 import random
 import shutil
@@ -37,6 +38,8 @@ PREVIEW_WIDTH = 1200
 PREVIEW_HEIGHT = 720
 MASK_WATER_BODY = (0, 0, 255)
 MASK_WATERWAY = (0, 0, 180)
+TOPOLOGY_REFERENCE_CATALOG_PATH = Path(__file__).with_name("topology_reference_regions.json")
+_TOPOLOGY_REFERENCE_REGIONS_CACHE: list[dict] | None = None
 
 
 class NativeExporterApp:
@@ -441,6 +444,8 @@ class ExportConfig:
         self.compile_max_height = 360.0
         self.elevation_span_meters = 0.0
         self.relief_source = "unknown"
+        self.topology_report = None
+        self.topology_reference_id = os.environ.get("BAR_TOPOLOGY_REFERENCE") or None
 
 
 def sanitize_name(value: str) -> str:
@@ -551,6 +556,280 @@ def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * radius_km * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - a)))
 
 
+def compute_bounds_signature(bounds):
+    if not bounds:
+        return None
+    width_km = distance_km((bounds["north"] + bounds["south"]) / 2, bounds["west"], (bounds["north"] + bounds["south"]) / 2, bounds["east"])
+    height_km = distance_km(bounds["south"], (bounds["east"] + bounds["west"]) / 2, bounds["north"], (bounds["east"] + bounds["west"]) / 2)
+    return {
+        "stage": "selection",
+        "bounds": {key: bounds[key] for key in ("south", "west", "north", "east")},
+        "widthKm": width_km,
+        "heightKm": height_km,
+        "centerLat": (bounds["north"] + bounds["south"]) / 2,
+        "centerLon": (bounds["east"] + bounds["west"]) / 2,
+    }
+
+
+def load_topology_reference_regions() -> list[dict]:
+    global _TOPOLOGY_REFERENCE_REGIONS_CACHE
+    if _TOPOLOGY_REFERENCE_REGIONS_CACHE is not None:
+        return _TOPOLOGY_REFERENCE_REGIONS_CACHE
+    if not TOPOLOGY_REFERENCE_CATALOG_PATH.exists():
+        _TOPOLOGY_REFERENCE_REGIONS_CACHE = []
+        return _TOPOLOGY_REFERENCE_REGIONS_CACHE
+    try:
+        catalog = json.loads(TOPOLOGY_REFERENCE_CATALOG_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        catalog = []
+    _TOPOLOGY_REFERENCE_REGIONS_CACHE = catalog if isinstance(catalog, list) else []
+    return _TOPOLOGY_REFERENCE_REGIONS_CACHE
+
+
+def get_topology_reference(reference_id: str | None):
+    if not reference_id:
+        return None
+    return next((region for region in load_topology_reference_regions() if region["id"] == reference_id), None)
+
+
+def compare_topology_signatures(reference, signatures, bounds_signature, compile_min_height: float, compile_max_height: float):
+    issues = []
+    if not reference:
+        return issues
+    tolerance = reference.get("tolerance", {})
+    expected = reference.get("expected", {})
+    if bounds_signature:
+        ref_bounds = compute_bounds_signature(reference["bounds"])
+        center_distance = distance_km(
+            bounds_signature["centerLat"],
+            bounds_signature["centerLon"],
+            ref_bounds["centerLat"],
+            ref_bounds["centerLon"],
+        )
+        width_delta_pct = abs(bounds_signature["widthKm"] - expected["widthKm"]) / max(0.001, expected["widthKm"]) * 100
+        height_delta_pct = abs(bounds_signature["heightKm"] - expected["heightKm"]) / max(0.001, expected["heightKm"]) * 100
+        if center_distance > tolerance.get("boundsCenterKm", 2.0):
+            issues.append({
+                "severity": "error",
+                "code": "bounds-mismatch",
+                "message": f'Selection center is {center_distance:.2f} km from reference center.',
+                "expected": f'{tolerance.get("boundsCenterKm", 2.0)} km',
+                "actual": f"{center_distance:.2f} km",
+            })
+        if width_delta_pct > tolerance.get("sizePct", 35.0) or height_delta_pct > tolerance.get("sizePct", 35.0):
+            issues.append({
+                "severity": "warning",
+                "code": "scale-mismatch",
+                "message": f"Selection footprint differs from reference size ({width_delta_pct:.0f}% width, {height_delta_pct:.0f}% height).",
+                "expected": f'{expected["widthKm"]:.1f}x{expected["heightKm"]:.1f} km',
+                "actual": f'{bounds_signature["widthKm"]:.1f}x{bounds_signature["heightKm"]:.1f} km',
+            })
+    source = next((sig for sig in signatures if sig["stage"] == "sourceElevation"), None)
+    preview = next((sig for sig in signatures if sig["stage"] == "heightmapPreview"), None)
+    bar_export = next((sig for sig in signatures if sig["stage"] == "barExport"), None)
+    if source:
+        if source["heightSpan"] < expected["elevationSpanM"] * (1 - tolerance.get("elevationSpanPct", 60.0) / 100):
+            issues.append({
+                "severity": "error",
+                "code": "relief-too-flat",
+                "message": "Source elevation span is lower than the reference relief.",
+                "expected": f'{expected["elevationSpanM"]:.0f} m',
+                "actual": f'{source["heightSpan"]:.1f} m',
+            })
+        if (
+            expected.get("dominantGradient") != "mixed"
+            and source["dominantGradient"] != expected.get("dominantGradient")
+            and source.get("gradientScore", 0.0) >= tolerance.get("gradientScoreMin", 0.1)
+        ):
+            issues.append({
+                "severity": "warning",
+                "code": "gradient-mismatch",
+                "message": "Dominant source gradient does not match the reference.",
+                "expected": expected.get("dominantGradient"),
+                "actual": source["dominantGradient"],
+            })
+    if preview and preview["heightSpan"] < max(8.0, expected["ruggedness"] * 1.2):
+        issues.append({
+            "severity": "error",
+            "code": "relief-too-flat",
+            "message": "Native preview heightmap span is too flat for the selected reference.",
+            "expected": f'>{max(8.0, expected["ruggedness"] * 1.2):.1f}',
+            "actual": f'{preview["heightSpan"]:.1f}',
+        })
+    if preview and bar_export:
+        ratio = bar_export["heightSpan"] / max(1.0, preview["heightSpan"])
+        if ratio < 0.72 or ratio > 1.28 or (preview["dominantGradient"] != "mixed" and preview["dominantGradient"] != bar_export["dominantGradient"]):
+            issues.append({
+                "severity": "error",
+                "code": "preview-export-divergence",
+                "message": "Native BAR export topology diverges from preview heightmap.",
+                "expected": f'{preview["heightSpan"]:.1f} span / {preview["dominantGradient"]}',
+                "actual": f'{bar_export["heightSpan"]:.1f} span / {bar_export["dominantGradient"]}',
+            })
+    if not math.isfinite(compile_min_height) or not math.isfinite(compile_max_height) or compile_max_height <= compile_min_height:
+        issues.append({
+            "severity": "error",
+            "code": "export-height-bounds-mismatch",
+            "message": "Native export compile height bounds are invalid.",
+            "expected": "finite min/max range",
+            "actual": f"{compile_min_height:.2f}..{compile_max_height:.2f}",
+        })
+    return issues
+
+
+def compute_topology_signature(values, width: int, height: int, stage: str, water_level: float | None = None, source: str | None = None):
+    step_x = max(1, width // 96)
+    step_y = max(1, height // 96)
+    samples = []
+    for y in range(0, height, step_y):
+        for x in range(0, width, step_x):
+            value = float(values[min(len(values) - 1, y * width + x)])
+            if math.isfinite(value):
+                samples.append((x, y, value))
+    if not samples:
+        min_h = max_h = mean_h = std_h = 0.0
+    else:
+        heights = [sample[2] for sample in samples]
+        min_h = min(heights)
+        max_h = max(heights)
+        mean_h = sum(heights) / len(heights)
+        std_h = math.sqrt(sum((value - mean_h) ** 2 for value in heights) / len(heights))
+    rugged_sum = 0.0
+    rugged_count = 0
+    for y in range(step_y, height, step_y):
+        for x in range(step_x, width, step_x):
+            value = float(values[y * width + x])
+            left = float(values[y * width + x - step_x])
+            up = float(values[(y - step_y) * width + x])
+            rugged_sum += abs(value - left) + abs(value - up)
+            rugged_count += 2
+    profile_ns, profile_we = sample_height_profiles(values, width, height, 17)
+    west_mean = average_profile_slice(profile_we, 0.0, 0.35)
+    east_mean = average_profile_slice(profile_we, 0.65, 1.0)
+    north_mean = average_profile_slice(profile_ns, 0.0, 0.35)
+    south_mean = average_profile_slice(profile_ns, 0.65, 1.0)
+    east_delta = east_mean - west_mean
+    south_delta = south_mean - north_mean
+    height_span = max(0.0, max_h - min_h)
+    threshold = max(3.0, height_span * 0.08)
+    dominant_gradient = "mixed"
+    if abs(east_delta) > abs(south_delta) and abs(east_delta) >= threshold:
+        dominant_gradient = "east" if east_delta > 0 else "west"
+    elif abs(south_delta) >= threshold:
+        dominant_gradient = "south" if south_delta > 0 else "north"
+    water_pct = None
+    if water_level is not None and samples:
+        water_pct = len([sample for sample in samples if sample[2] <= water_level]) / len(samples) * 100
+    return {
+        "stage": stage,
+        "width": width,
+        "height": height,
+        "minHeight": min_h,
+        "maxHeight": max_h,
+        "heightSpan": height_span,
+        "meanHeight": mean_h,
+        "stdDevHeight": std_h,
+        "ruggedness": rugged_sum / rugged_count if rugged_count else 0.0,
+        "dominantGradient": dominant_gradient,
+        "gradientScore": max(abs(east_delta), abs(south_delta)) / height_span if height_span > 0 else 0.0,
+        "profileNorthSouth": profile_ns,
+        "profileWestEast": profile_we,
+        "waterCoveragePct": water_pct,
+        "source": source,
+    }
+
+
+def sample_height_profiles(values, width: int, height: int, points: int):
+    center_x = width // 2
+    center_y = height // 2
+    profile_ns = []
+    profile_we = []
+    for i in range(points):
+        t = 0 if points <= 1 else i / (points - 1)
+        x = min(width - 1, max(0, round(t * (width - 1))))
+        y = min(height - 1, max(0, round(t * (height - 1))))
+        profile_we.append(float(values[center_y * width + x]))
+        profile_ns.append(float(values[y * width + center_x]))
+    return profile_ns, profile_we
+
+
+def average_profile_slice(profile, start_ratio: float, end_ratio: float) -> float:
+    if not profile:
+        return 0.0
+    start = max(0, math.floor(len(profile) * start_ratio))
+    end = max(start + 1, math.ceil(len(profile) * end_ratio))
+    values = profile[start:end]
+    return sum(values) / len(values)
+
+
+def image_luma_values(image: Image.Image) -> list[float]:
+    gray = image.convert("L")
+    return [float(value) for value in gray.getdata()]
+
+
+def create_topology_validation_report(config: ExportConfig, bounds, elevation, base_height: Image.Image, stage: str = "native-export"):
+    metadata = elevation.get("metadata") or {}
+    source_values = [float(value) for value in elevation.get("values", []) if math.isfinite(float(value))]
+    signatures = []
+    bounds_signature = compute_bounds_signature(bounds)
+    if bounds_signature:
+        signatures.append(bounds_signature)
+    if source_values:
+        signatures.append(compute_topology_signature(
+            source_values,
+            elevation.get("grid_width") or elevation.get("grid_size"),
+            elevation.get("grid_height") or elevation.get("grid_size"),
+            "sourceElevation",
+            source=metadata.get("source"),
+        ))
+    signatures.append(compute_topology_signature(
+        image_luma_values(base_height),
+        base_height.width,
+        base_height.height,
+        "heightmapPreview",
+        water_level=58,
+        source=config.relief_source,
+    ))
+    signatures.append(compute_topology_signature(
+        image_luma_values(base_height.resize((config.size + 1, config.size + 1), Image.Resampling.BILINEAR)),
+        config.size + 1,
+        config.size + 1,
+        "barExport",
+        water_level=58,
+        source="native-heightmap-asset",
+    ))
+    reference = get_topology_reference(config.topology_reference_id)
+    issues = compare_topology_signatures(
+        reference,
+        signatures,
+        bounds_signature,
+        config.compile_min_height,
+        config.compile_max_height,
+    )
+    status = "fail" if any(issue["severity"] == "error" for issue in issues) else ("warning" if issues else "pass")
+    return {
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "referenceRegionId": reference["id"] if reference else None,
+        "referenceRegionLabel": reference["label"] if reference else None,
+        "mapName": config.map_name,
+        "mapSize": config.size,
+        "bounds": {key: bounds[key] for key in ("south", "west", "north", "east")},
+        "elevationMetadata": metadata,
+        "reliefProfile": {
+            "source": config.relief_source,
+            "elevationSpanMeters": config.elevation_span_meters,
+            "compileMinHeight": config.compile_min_height,
+            "compileMaxHeight": config.compile_max_height,
+        },
+        "compileMinHeight": config.compile_min_height,
+        "compileMaxHeight": config.compile_max_height,
+        "signatures": signatures,
+        "issues": issues,
+        "status": status,
+        "stage": stage,
+    }
+
+
 def export_native_package(config: ExportConfig, status) -> None:
     if config.output.suffix.lower() != ".sdz":
         config.output = config.output.with_suffix(".sdz")
@@ -579,6 +858,7 @@ def export_native_package(config: ExportConfig, status) -> None:
 
         status(38, "Generating base terrain...")
         base_height, base_texture = generate_base_maps(config, bounds, elevation, features)
+        config.topology_report = create_topology_validation_report(config, bounds, elevation, base_height)
 
         status(52, "Writing BAR heightmap, metalmap, grassmap and typemap...")
         write_heightmap(base_height, config.size, assets / "heightmap.bmp")
@@ -607,10 +887,15 @@ def export_native_package(config: ExportConfig, status) -> None:
         (root / "build.sh").write_text("#!/usr/bin/env bash\npython3 build_map.py\n", encoding="utf-8")
         (root / "build.bat").write_text("@echo off\r\npython build_map.py\r\n", encoding="utf-8")
         (root / "build_map.py").write_text(generate_build_script(config), encoding="utf-8")
+        topology_report_path = root / "topology_validation.json"
+        topology_report_path.write_text(json.dumps(config.topology_report, indent=2), encoding="utf-8")
         shutil.copy2(Path(__file__), root / "desktop_native.py")
+        if TOPOLOGY_REFERENCE_CATALOG_PATH.exists():
+            shutil.copy2(TOPOLOGY_REFERENCE_CATALOG_PATH, root / TOPOLOGY_REFERENCE_CATALOG_PATH.name)
 
         status(86, "Packaging source ZIP...")
         config.output.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(topology_report_path, config.output.parent / "topology_validation.json")
         source_zip = config.output.with_name(f"{config.output.stem}_source.zip")
         with zipfile.ZipFile(source_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=4) as zf:
             for path in root.rglob("*"):
@@ -1149,6 +1434,9 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
     source_minimap = root / "assets" / "minimap.png"
     if source_minimap.exists():
         shutil.copy2(source_minimap, map_container / "minimap.png")
+    topology_report = root / "topology_validation.json"
+    if topology_report.exists():
+        shutil.copy2(topology_report, map_container / "topology_validation.json")
 
     if final_sdz.exists():
         final_sdz.unlink()
