@@ -10,7 +10,8 @@ self.onmessage = async function (event) {
             heightmap: generated.heightmap,
             texture: generated.texture,
             resources: generated.resources,
-            config: generated.config
+            config: generated.config,
+            elevationMetadata: generated.elevationMetadata
         }, [generated.heightmap.buffer, generated.texture.buffer]);
     } catch (error) {
         self.postMessage({ type: 'error', message: error.message });
@@ -26,8 +27,14 @@ async function buildTerrainFromOsmWorker(bounds, featureMask, elevationGrid, con
 
     postProgress(79, 'Rasterizing OSM landscape features...');
 
-    const minElevation = Math.min(...elevationGrid.values);
-    const maxElevation = Math.max(...elevationGrid.values);
+    const elevationMetadata = normalizeElevationMetadata(elevationGrid);
+    const finiteElevationValues = elevationGrid.values.filter(Number.isFinite);
+    const minElevation = Number.isFinite(elevationMetadata.minElevationMeters)
+        ? elevationMetadata.minElevationMeters
+        : Math.min(...finiteElevationValues);
+    const maxElevation = Number.isFinite(elevationMetadata.maxElevationMeters)
+        ? elevationMetadata.maxElevationMeters
+        : Math.max(...finiteElevationValues);
     const elevationRange = Math.max(1, maxElevation - minElevation);
 
     for (let y = 0; y < size; y++) {
@@ -113,9 +120,30 @@ async function buildTerrainFromOsmWorker(bounds, featureMask, elevationGrid, con
             metalStrength,
             geoSpots,
             startPositions,
-            osmBounds: bounds
-        }
+            osmBounds: bounds,
+            elevationMetadata
+        },
+        elevationMetadata
     };
+}
+
+function normalizeElevationMetadata(elevationGrid) {
+    const gridWidth = elevationGrid.gridWidth || elevationGrid.gridSize || Math.sqrt(elevationGrid.values.length);
+    const gridHeight = elevationGrid.gridHeight || elevationGrid.gridSize || gridWidth;
+    const values = elevationGrid.values || [];
+    const finiteValues = values.filter(Number.isFinite);
+    const fallbackMetadata = {
+        source: elevationGrid.synthetic ? 'synthetic-fallback' : 'unknown',
+        providerName: elevationGrid.synthetic ? 'Procedural synthetic relief' : 'Legacy elevation grid',
+        gridWidth,
+        gridHeight,
+        sampleCount: finiteValues.length,
+        minElevationMeters: finiteValues.length ? Math.min(...finiteValues) : 0,
+        maxElevationMeters: finiteValues.length ? Math.max(...finiteValues) : 0,
+        synthetic: Boolean(elevationGrid.synthetic),
+        fallbackReason: elevationGrid.synthetic ? 'Legacy synthetic elevation grid' : null
+    };
+    return Object.assign(fallbackMetadata, elevationGrid.metadata || {});
 }
 
 function postProgress(percent, message) {
@@ -148,16 +176,19 @@ function sampleFeatureMask(mask, u, v) {
 }
 
 function sampleElevation(grid, u, v) {
-    const max = grid.gridSize - 1;
-    const gx = u * max;
-    const gy = v * max;
+    const gridWidth = grid.gridWidth || grid.gridSize || Math.sqrt(grid.values.length);
+    const gridHeight = grid.gridHeight || grid.gridSize || gridWidth;
+    const maxX = gridWidth - 1;
+    const maxY = gridHeight - 1;
+    const gx = u * maxX;
+    const gy = v * maxY;
     const x0 = Math.floor(gx);
     const y0 = Math.floor(gy);
-    const x1 = Math.min(max, x0 + 1);
-    const y1 = Math.min(max, y0 + 1);
+    const x1 = Math.min(maxX, x0 + 1);
+    const y1 = Math.min(maxY, y0 + 1);
     const tx = gx - x0;
     const ty = gy - y0;
-    const at = (x, y) => grid.values[y * grid.gridSize + x] || 0;
+    const at = (x, y) => grid.values[y * gridWidth + x] || 0;
     const a = at(x0, y0) * (1 - tx) + at(x1, y0) * tx;
     const b = at(x0, y1) * (1 - tx) + at(x1, y1) * tx;
     return a * (1 - ty) + b * ty;

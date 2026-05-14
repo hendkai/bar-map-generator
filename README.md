@@ -66,6 +66,14 @@ In short: **GitHub Pages generates the package; your PC compiles the playable `.
 4. **Compilation**: Uses PyMapConv to create the final .sd7 map file
 5. **Installation**: Automatically copies map to your BAR directory
 
+### OSM Elevation Pipeline
+
+OSM mode uses two separate data sources. Overpass/OpenStreetMap provides geometry only: water, roads, forest, urban areas, rock, and other land-use masks. It is not treated as an elevation source. The base height samples currently come from the Open-Meteo Elevation API, sampled across the selected OSM rectangle and passed to the terrain worker as an `ElevationGrid` with source, bounds, grid size, sample count, min/max elevation, estimated meters-per-sample resolution, fallback status, fallback reason, and cache key metadata.
+
+If Open-Meteo is rate-limited, returns an API error, or produces incomplete/non-numeric elevation samples, the generator marks the grid as `synthetic-fallback` and uses procedural relief instead of presenting it as real DEM data. OSM masks are applied after this base elevation step to lower or flatten water, roads, and urban areas, and to raise rocky areas locally.
+
+Local DEM tile support is prepared through the provider-style elevation model, but Copernicus/SRTM/local tile cache providers are not implemented yet.
+
 ## 📁 Generated Assets
 
 The generator creates all required BAR map assets:

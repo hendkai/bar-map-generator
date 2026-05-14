@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import END, filedialog, messagebox, ttk
 import tkinter as tk
@@ -660,6 +661,7 @@ def load_elevation_grid(bounds, grid_size: int, status):
             points.append((lat, lon))
 
     values: list[float] = []
+    fallback_reason = None
     try:
         for i in range(0, len(points), 50):
             batch = points[i : i + 50]
@@ -675,13 +677,21 @@ def load_elevation_grid(bounds, grid_size: int, status):
             elevations = response.json().get("elevation")
             if not isinstance(elevations, list):
                 raise ValueError("Elevation response missing elevation list")
-            values.extend(float(v or 0) for v in elevations)
+            if len(elevations) != len(batch):
+                raise ValueError(f"Elevation response returned {len(elevations)}/{len(batch)} samples")
+            batch_values = [float(v) for v in elevations if isinstance(v, (int, float)) or str(v).replace(".", "", 1).replace("-", "", 1).isdigit()]
+            if len(batch_values) != len(batch):
+                raise ValueError("Elevation response contained non-numeric samples")
+            values.extend(batch_values)
             status(15 + 10 * min(1, len(values) / len(points)), f"Elevation samples: {len(values)}/{len(points)}")
             time.sleep(0.1)
-    except Exception:
+    except Exception as exc:
+        fallback_reason = f"Open-Meteo elevation failed: {exc}"
         values = []
 
     if len(values) != len(points):
+        fallback_reason = fallback_reason or f"Open-Meteo returned {len(values)}/{len(points)} samples"
+        status(25, f"Elevation fallback: {fallback_reason}")
         random.seed(int(abs(bounds["lat"] * 1000 + bounds["lon"] * 1000)))
         values = []
         for y in range(grid_size):
@@ -689,7 +699,77 @@ def load_elevation_grid(bounds, grid_size: int, status):
                 u = x / (grid_size - 1)
                 v = y / (grid_size - 1)
                 values.append(90 + math.sin((u * 2 + v) * math.pi) * 24 + noise(u * 8, v * 8) * 18)
-    return {"grid_size": grid_size, "values": values}
+
+    grid = create_elevation_grid(
+        bounds=bounds,
+        grid_size=grid_size,
+        values=values,
+        source="synthetic-fallback" if fallback_reason else "open-meteo",
+        provider_name="Procedural synthetic relief" if fallback_reason else "Open-Meteo Elevation API",
+        synthetic=bool(fallback_reason),
+        fallback_reason=fallback_reason,
+    )
+    meta = grid["metadata"]
+    status(
+        26,
+        f'Elevation source: {meta["provider_name"]}; grid {meta["grid_width"]}x{meta["grid_height"]}; '
+        f'min/max {meta["min_elevation_m"]:.1f}/{meta["max_elevation_m"]:.1f} m'
+    )
+    return grid
+
+
+def create_elevation_grid(bounds, grid_size: int, values: list[float], source: str, provider_name: str, synthetic: bool, fallback_reason: str | None):
+    plain_bounds = {
+        "south": bounds["south"],
+        "west": bounds["west"],
+        "north": bounds["north"],
+        "east": bounds["east"],
+    }
+    finite_values = [v for v in values if math.isfinite(v)]
+    metadata = {
+        "source": source,
+        "provider_name": provider_name,
+        "bounds": plain_bounds,
+        "grid_width": grid_size,
+        "grid_height": grid_size,
+        "sample_count": len(finite_values),
+        "min_elevation_m": min(finite_values) if finite_values else 0.0,
+        "max_elevation_m": max(finite_values) if finite_values else 0.0,
+        "estimated_resolution_m_x": estimate_longitude_resolution_m(plain_bounds, grid_size),
+        "estimated_resolution_m_y": estimate_latitude_resolution_m(plain_bounds, grid_size),
+        "synthetic": synthetic,
+        "fallback_reason": fallback_reason,
+        "cache_key": create_elevation_cache_key(source, plain_bounds, grid_size, grid_size),
+        "generated_at_iso": datetime.now(timezone.utc).isoformat(),
+    }
+    return {
+        "grid_size": grid_size,
+        "grid_width": grid_size,
+        "grid_height": grid_size,
+        "values": values,
+        "synthetic": synthetic,
+        "metadata": metadata,
+    }
+
+
+def estimate_latitude_resolution_m(bounds, grid_height: int) -> float:
+    if grid_height <= 1:
+        return 0.0
+    return abs(bounds["north"] - bounds["south"]) * 111320 / (grid_height - 1)
+
+
+def estimate_longitude_resolution_m(bounds, grid_width: int) -> float:
+    if grid_width <= 1:
+        return 0.0
+    mid_lat = (bounds["north"] + bounds["south"]) / 2
+    return abs(bounds["east"] - bounds["west"]) * 111320 * math.cos(math.radians(mid_lat)) / (grid_width - 1)
+
+
+def create_elevation_cache_key(source: str, bounds, grid_width: int, grid_height: int) -> str:
+    return (
+        f'{source}:{bounds["south"]:.6f}:{bounds["west"]:.6f}:'
+        f'{bounds["north"]:.6f}:{bounds["east"]:.6f}:{grid_width}x{grid_height}'
+    )
 
 
 def load_osm_features(bounds):
@@ -716,8 +796,9 @@ def load_osm_features(bounds):
 
 def generate_base_maps(config: ExportConfig, bounds, elevation, features):
     size = config.size
-    min_el = min(elevation["values"])
-    max_el = max(elevation["values"])
+    metadata = elevation.get("metadata") or {}
+    min_el = metadata.get("min_elevation_m", min(elevation["values"]))
+    max_el = metadata.get("max_elevation_m", max(elevation["values"]))
     span = max(1, max_el - min_el)
     height_range = max(220.0, min(1400.0, span * config.height_scale))
     config.compile_min_height = -max(25.0, height_range * 0.08)
@@ -790,18 +871,21 @@ def project_point(config: ExportConfig, bounds, lat: float, lon: float):
 
 
 def sample_elevation(grid, u: float, v: float) -> float:
-    n = grid["grid_size"] - 1
-    gx = u * n
-    gy = v * n
+    grid_width = grid.get("grid_width") or grid["grid_size"]
+    grid_height = grid.get("grid_height") or grid["grid_size"]
+    max_x = grid_width - 1
+    max_y = grid_height - 1
+    gx = u * max_x
+    gy = v * max_y
     x0 = int(gx)
     y0 = int(gy)
-    x1 = min(n, x0 + 1)
-    y1 = min(n, y0 + 1)
+    x1 = min(max_x, x0 + 1)
+    y1 = min(max_y, y0 + 1)
     tx = gx - x0
     ty = gy - y0
 
     def at(x, y):
-        return grid["values"][y * grid["grid_size"] + x]
+        return grid["values"][y * grid_width + x]
 
     a = at(x0, y0) * (1 - tx) + at(x1, y0) * tx
     b = at(x0, y1) * (1 - tx) + at(x1, y1) * tx
