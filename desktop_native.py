@@ -20,6 +20,7 @@ import threading
 import time
 import zipfile
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from tkinter import END, filedialog, messagebox, ttk
 import tkinter as tk
@@ -34,6 +35,12 @@ OVERPASS_ENDPOINTS = (
 )
 PYMAPCONV_SOURCE_URL = "https://raw.githubusercontent.com/Beherith/springrts_smf_compiler/v0.6.3/src/pymapconv.py"
 PYMAPCONV_VERSION_URL = "https://raw.githubusercontent.com/Beherith/springrts_smf_compiler/v0.6.3/src/version.py"
+OPEN_METEO_ELEVATION_BATCH_SIZE = 10
+OPEN_METEO_ELEVATION_BATCH_DELAY_SECONDS = 1.7
+OPEN_METEO_ELEVATION_MAX_RETRIES = 2
+OSM_TILE_REQUEST_DELAY_SECONDS = 0.15
+OSM_TILE_MAX_RETRIES = 2
+OSM_TILE_PARENT_FALLBACK_LEVELS = 3
 PREVIEW_WIDTH = 1200
 PREVIEW_HEIGHT = 720
 MASK_WATER_BODY = (0, 0, 255)
@@ -53,6 +60,7 @@ class NativeExporterApp:
         self.preview_bounds = None
         self.preview_rect = None
         self.preview_drag = None
+        self.last_pymapconv_log_path: Path | None = None
 
         self.mode = tk.StringVar(value="OSM location")
         self.map_name = tk.StringVar(value="struempfelbach_native")
@@ -215,6 +223,8 @@ class NativeExporterApp:
         ttk.Button(actions, text="Load OSM Preview", command=self._load_preview).pack(side="left", padx=(0, 10))
         ttk.Button(actions, text="Generate Playable .sdz", style="Accent.TButton", command=self._start_export).pack(side="left")
         ttk.Button(actions, text="Open Output Folder", command=self._open_output_folder).pack(side="left", padx=10)
+        ttk.Button(actions, text="Read PyMapConv Log", command=self._read_pymapconv_log).pack(side="left", padx=(0, 10))
+        ttk.Button(actions, text="Open PyMapConv Log", command=self._open_pymapconv_log).pack(side="left")
 
         preview_frame = ttk.Frame(shell)
         preview_frame.pack(fill="x", pady=(16, 0))
@@ -270,6 +280,40 @@ class NativeExporterApp:
         folder = Path(self.output_path.get()).expanduser().parent
         os.system(f'xdg-open "{folder}" >/dev/null 2>&1 &')
 
+    def _expected_pymapconv_log_path(self) -> Path:
+        output = Path(self.output_path.get()).expanduser()
+        map_name = sanitize_name(self.map_name.get())
+        return output.with_name(f"{map_name}.sdz").with_suffix(".pymapconv.log")
+
+    def _resolve_pymapconv_log_path(self) -> Path | None:
+        candidates = [
+            self.last_pymapconv_log_path,
+            self._expected_pymapconv_log_path(),
+        ]
+        output_dir = Path(self.output_path.get()).expanduser().parent
+        if output_dir.exists():
+            candidates.extend(sorted(output_dir.glob("*.pymapconv.log"), key=lambda path: path.stat().st_mtime, reverse=True))
+        for path in candidates:
+            if path and path.exists():
+                return path
+        return None
+
+    def _read_pymapconv_log(self) -> None:
+        path = self._resolve_pymapconv_log_path()
+        if path is None:
+            messagebox.showinfo("PyMapConv log", "No PyMapConv log found yet. Run an export first.")
+            return
+        self.last_pymapconv_log_path = path
+        self._append_pymapconv_log_summary(path)
+
+    def _open_pymapconv_log(self) -> None:
+        path = self._resolve_pymapconv_log_path()
+        if path is None:
+            messagebox.showinfo("PyMapConv log", "No PyMapConv log found yet. Run an export first.")
+            return
+        self.last_pymapconv_log_path = path
+        os.system(f'xdg-open "{path}" >/dev/null 2>&1 &')
+
     def _start_export(self) -> None:
         if self.worker and self.worker.is_alive():
             messagebox.showinfo("Export running", "A map export is already running.")
@@ -286,6 +330,22 @@ class NativeExporterApp:
         self.log.insert(END, f"{time.strftime('%H:%M:%S')}  {msg}\n")
         self.log.see(END)
 
+    def _append_pymapconv_log_summary(self, path: Path) -> None:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            self._append_log(f"Could not read PyMapConv log {path}: {exc}")
+            return
+
+        summary = summarize_pymapconv_log(text)
+        tail = text[-5000:] if len(text) > 5000 else text
+        self._append_log(f"PyMapConv log read from {path}")
+        if summary:
+            self._append_log(summary)
+        self._append_log("PyMapConv log tail:")
+        self.log.insert(END, f"{tail}\n")
+        self.log.see(END)
+
     def _export_worker(self) -> None:
         try:
             config = ExportConfig(
@@ -300,20 +360,31 @@ class NativeExporterApp:
                 selection_bounds=self.get_selection_bounds(),
                 bar_maps_dir=Path(self.bar_maps_path.get()).expanduser(),
             )
+            self.last_pymapconv_log_path = config.output.with_suffix(".pymapconv.log")
             export_native_package(config, self._set_status)
             self._set_status(100, f"Done: {config.output}")
             self.root.after(0, messagebox.showinfo, "Export complete", f"Created:\n{config.output}")
         except Exception as exc:
             self._set_status(0, f"Export failed: {exc}")
+            log_path = self._resolve_pymapconv_log_path()
+            if log_path:
+                self.root.after(0, self._append_pymapconv_log_summary, log_path)
             self.root.after(0, messagebox.showerror, "Export failed", str(exc))
 
     def _load_preview(self) -> None:
         def worker() -> None:
             try:
-                bounds = resolve_bounds(self.location.get().strip(), float(self.area_km.get()), self._set_status)
-                image, image_bounds = load_osm_preview_image(bounds)
+                self._set_status(3, "Preview: starting OSM lookup...")
+                preview_area_km = self._selected_area_km() * 1.15
+                self._set_status(
+                    3,
+                    f"Preview: loading an OSM area around the selected BAR footprint ({preview_area_km:.2f}x{preview_area_km:.2f} km with margin)...",
+                )
+                bounds = resolve_bounds(self.location.get().strip(), preview_area_km, self._set_status)
+                image, image_bounds = load_osm_preview_image(bounds, self._set_status)
                 photo = ImageTk.PhotoImage(image)
                 self.root.after(0, self._show_preview, photo, image_bounds)
+                self._set_status(100, "Preview loaded.")
             except Exception as exc:
                 self._set_status(0, f"Preview failed: {exc}")
 
@@ -472,8 +543,32 @@ def install_to_bar_maps(sd7_path: Path, maps_dir: Path | None, status) -> None:
     target_dir = maps_dir or detect_bar_maps_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / sd7_path.name
+    if target.exists():
+        target.unlink()
+        status(98, f"Removed old BAR maps copy before installing: {target}")
     shutil.copy2(sd7_path, target)
     status(99, f"Installed map into BAR maps folder: {target}")
+
+
+def remove_stale_export_outputs(config: ExportConfig, status) -> None:
+    paths = [config.output]
+    if config.bar_maps_dir:
+        paths.append(config.bar_maps_dir / config.output.name)
+    else:
+        paths.append(detect_bar_maps_dir() / config.output.name)
+
+    seen: set[Path] = set()
+    for path in paths:
+        try:
+            resolved = path.expanduser().resolve()
+        except OSError:
+            resolved = path.expanduser()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if resolved.exists():
+            resolved.unlink()
+            status(2, f"Removed old map archive before export: {resolved}")
 
 
 def synthetic_bounds():
@@ -502,16 +597,35 @@ def create_synthetic_elevation_grid(bounds, grid_size: int):
     return {"grid_size": grid_size, "values": values}
 
 
-def load_osm_preview_image(bounds):
+def load_osm_preview_image(bounds, status=None):
     zoom = 13
-    center_x, center_y = latlon_to_tile(bounds["lat"], bounds["lon"], zoom)
     tile_size = 256
-    image = Image.new("RGB", (tile_size * 3, tile_size * 3), (18, 27, 36))
-    for dy in range(-1, 2):
-        for dx in range(-1, 2):
-            tx = center_x + dx
-            ty = center_y + dy
+    for candidate_zoom in range(13, 9, -1):
+        west_x, north_y = latlon_to_tile(bounds["north"], bounds["west"], candidate_zoom)
+        east_x, south_y = latlon_to_tile(bounds["south"], bounds["east"], candidate_zoom)
+        min_tx = max(0, min(west_x, east_x) - 1)
+        max_tx = max(west_x, east_x) + 1
+        min_ty = max(0, min(north_y, south_y) - 1)
+        max_ty = max(north_y, south_y) + 1
+        tile_count = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
+        zoom = candidate_zoom
+        if tile_count <= 64 or candidate_zoom == 10:
+            break
+
+    tile_cols = max_tx - min_tx + 1
+    tile_rows = max_ty - min_ty + 1
+    total_tiles = tile_cols * tile_rows
+    image = Image.new("RGB", (tile_size * tile_cols, tile_size * tile_rows), (18, 27, 36))
+    if status:
+        status(8, f"Preview: downloading {total_tiles} OSM tiles at zoom {zoom} for the selected footprint...")
+    loaded_tiles = 0
+    tile_number = 0
+    for ty in range(min_ty, max_ty + 1):
+        for tx in range(min_tx, max_tx + 1):
+            tile_number += 1
             try:
+                if status:
+                    status(8, f"Preview tile {tile_number}/{total_tiles}: requesting {zoom}/{tx}/{ty}...")
                 response = requests.get(
                     f"https://tile.openstreetmap.org/{zoom}/{tx}/{ty}.png",
                     headers={"User-Agent": "BAR Native Map Generator"},
@@ -522,13 +636,153 @@ def load_osm_preview_image(bounds):
                         tmp.write(response.content)
                         tmp.flush()
                         tile = Image.open(tmp.name).convert("RGB")
-                    image.paste(tile, ((dx + 1) * tile_size, (dy + 1) * tile_size))
-            except Exception:
-                pass
+                    image.paste(tile, ((tx - min_tx) * tile_size, (ty - min_ty) * tile_size))
+                    loaded_tiles += 1
+                    if status:
+                        status(8, f"Preview tile {tile_number}/{total_tiles} loaded ({loaded_tiles}/{total_tiles} successful).")
+                elif status:
+                    status(8, f"Preview tile {tile_number}/{total_tiles} returned HTTP {response.status_code}; continuing.")
+            except Exception as exc:
+                if status:
+                    status(8, f"Preview tile {tile_number}/{total_tiles} failed: {exc}; continuing.")
+            if tile_number < total_tiles:
+                time.sleep(OSM_TILE_REQUEST_DELAY_SECONDS)
     preview = image.resize((PREVIEW_WIDTH, PREVIEW_HEIGHT), Image.Resampling.BILINEAR)
-    west, north = tile_to_latlon(center_x - 1, center_y - 1, zoom)
-    east, south = tile_to_latlon(center_x + 2, center_y + 2, zoom)
+    west, north = tile_to_latlon(min_tx, min_ty, zoom)
+    east, south = tile_to_latlon(max_tx + 1, max_ty + 1, zoom)
+    if status:
+        width_km = distance_km((north + south) / 2, west, (north + south) / 2, east)
+        height_km = distance_km(south, (west + east) / 2, north, (west + east) / 2)
+        status(18, f"Preview image ready with {loaded_tiles}/{total_tiles} OSM tiles; covers {width_km:.2f}x{height_km:.2f} km.")
     return preview, (west, south, east, north)
+
+
+def load_osm_raster_image(bounds, output_size: int, status=None, label: str = "OSM raster", max_tiles: int = 96):
+    tile_size = 256
+    selected = None
+    for zoom in range(16, 9, -1):
+        west_px, north_px = latlon_to_global_pixel(bounds["north"], bounds["west"], zoom)
+        east_px, south_px = latlon_to_global_pixel(bounds["south"], bounds["east"], zoom)
+        min_tx = max(0, int(math.floor(min(west_px, east_px) / tile_size)))
+        max_tx = max(0, int(math.floor((max(west_px, east_px) - 1) / tile_size)))
+        min_ty = max(0, int(math.floor(min(north_px, south_px) / tile_size)))
+        max_ty = max(0, int(math.floor((max(north_px, south_px) - 1) / tile_size)))
+        tile_count = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
+        selected = (zoom, min_tx, max_tx, min_ty, max_ty, west_px, east_px, north_px, south_px, tile_count)
+        if tile_count <= max_tiles:
+            break
+
+    if selected is None:
+        raise RuntimeError("Could not calculate OSM tile range.")
+
+    zoom, min_tx, max_tx, min_ty, max_ty, west_px, east_px, north_px, south_px, tile_count = selected
+    cols = max_tx - min_tx + 1
+    rows = max_ty - min_ty + 1
+    mosaic = Image.new("RGB", (cols * tile_size, rows * tile_size), (82, 96, 88))
+    loaded_tiles = 0
+    tile_number = 0
+    if status:
+        status(34, f"{label}: downloading {tile_count} OSM tile(s) at zoom {zoom} for final BAR texture...")
+
+    for ty in range(min_ty, max_ty + 1):
+        for tx in range(min_tx, max_tx + 1):
+            tile_number += 1
+            tile, source = fetch_osm_tile_with_fallback(zoom, tx, ty, status, label, tile_number, tile_count)
+            if tile:
+                mosaic.paste(tile, ((tx - min_tx) * tile_size, (ty - min_ty) * tile_size))
+                loaded_tiles += 1
+                if status:
+                    status(
+                        34,
+                        f"{label} tile {tile_number}/{tile_count} filled from {source} "
+                        f"({loaded_tiles}/{tile_count} usable).",
+                    )
+            elif status:
+                status(34, f"{label} tile {tile_number}/{tile_count} unavailable; leaving terrain fallback color.")
+            if tile_number < tile_count:
+                time.sleep(OSM_TILE_REQUEST_DELAY_SECONDS)
+
+    soften_tile_grid_edges(mosaic, tile_size)
+    x0 = max(0, min(mosaic.width - 1, min(west_px, east_px) - min_tx * tile_size))
+    x1 = max(x0 + 1, min(mosaic.width, max(west_px, east_px) - min_tx * tile_size))
+    y0 = max(0, min(mosaic.height - 1, min(north_px, south_px) - min_ty * tile_size))
+    y1 = max(y0 + 1, min(mosaic.height, max(north_px, south_px) - min_ty * tile_size))
+    cropped = mosaic.crop((int(x0), int(y0), int(x1), int(y1)))
+    if status:
+        status(36, f"{label}: {loaded_tiles}/{tile_count} tile(s) loaded; cropped to selected export bounds.")
+    return cropped.resize((output_size, output_size), Image.Resampling.LANCZOS).filter(ImageFilter.SMOOTH_MORE)
+
+
+def fetch_osm_tile_with_fallback(zoom: int, tx: int, ty: int, status, label: str, tile_number: int, tile_count: int):
+    tile = fetch_osm_tile(zoom, tx, ty, status, label, tile_number, tile_count)
+    if tile:
+        return tile, f"z{zoom}"
+
+    for parent_zoom in range(zoom - 1, max(-1, zoom - OSM_TILE_PARENT_FALLBACK_LEVELS - 1), -1):
+        if parent_zoom < 0:
+            break
+        scale = 2 ** (zoom - parent_zoom)
+        parent_tx = tx // scale
+        parent_ty = ty // scale
+        parent = fetch_osm_tile(parent_zoom, parent_tx, parent_ty, status, label, tile_number, tile_count, quiet=True)
+        if not parent:
+            continue
+        crop_size = 256 / scale
+        local_x = tx % scale
+        local_y = ty % scale
+        crop = (
+            int(round(local_x * crop_size)),
+            int(round(local_y * crop_size)),
+            int(round((local_x + 1) * crop_size)),
+            int(round((local_y + 1) * crop_size)),
+        )
+        return parent.crop(crop).resize((256, 256), Image.Resampling.BILINEAR), f"parent z{parent_zoom}"
+    return None, "missing"
+
+
+def fetch_osm_tile(
+    zoom: int,
+    tx: int,
+    ty: int,
+    status=None,
+    label: str = "OSM raster",
+    tile_number: int = 0,
+    tile_count: int = 0,
+    quiet: bool = False,
+):
+    for attempt in range(OSM_TILE_MAX_RETRIES + 1):
+        try:
+            if status and not quiet:
+                suffix = f" attempt {attempt + 1}/{OSM_TILE_MAX_RETRIES + 1}" if attempt else ""
+                status(34, f"{label} tile {tile_number}/{tile_count}: requesting {zoom}/{tx}/{ty}{suffix}...")
+            response = requests.get(
+                f"https://tile.openstreetmap.org/{zoom}/{tx}/{ty}.png",
+                headers={"User-Agent": "BAR Native Map Generator"},
+                timeout=20,
+            )
+            if response.ok:
+                return Image.open(BytesIO(response.content)).convert("RGB")
+            if status and not quiet:
+                status(34, f"{label} tile {tile_number}/{tile_count} returned HTTP {response.status_code}.")
+        except Exception as exc:
+            if status and not quiet:
+                status(34, f"{label} tile {tile_number}/{tile_count} request failed: {exc}.")
+        if attempt < OSM_TILE_MAX_RETRIES:
+            time.sleep(OSM_TILE_REQUEST_DELAY_SECONDS * (attempt + 2))
+    return None
+
+
+def soften_tile_grid_edges(image: Image.Image, tile_size: int) -> None:
+    if image.width <= tile_size and image.height <= tile_size:
+        return
+    blurred = image.filter(ImageFilter.GaussianBlur(radius=1.2))
+    seam_half_width = 3
+    for x in range(tile_size, image.width, tile_size):
+        box = (max(0, x - seam_half_width), 0, min(image.width, x + seam_half_width), image.height)
+        image.paste(blurred.crop(box), box)
+    for y in range(tile_size, image.height, tile_size):
+        box = (0, max(0, y - seam_half_width), image.width, min(image.height, y + seam_half_width))
+        image.paste(blurred.crop(box), box)
 
 
 def latlon_to_tile(lat: float, lon: float, zoom: int):
@@ -536,6 +790,15 @@ def latlon_to_tile(lat: float, lon: float, zoom: int):
     n = 2**zoom
     x = int((lon + 180.0) / 360.0 * n)
     y = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
+    return x, y
+
+
+def latlon_to_global_pixel(lat: float, lon: float, zoom: int):
+    clipped_lat = max(-85.05112878, min(85.05112878, lat))
+    lat_rad = math.radians(clipped_lat)
+    n = 2**zoom
+    x = (lon + 180.0) / 360.0 * n * 256
+    y = (1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n * 256
     return x, y
 
 
@@ -835,16 +1098,25 @@ def export_native_package(config: ExportConfig, status) -> None:
         config.output = config.output.with_suffix(".sdz")
     config.output = config.output.with_name(f"{config.map_name}.sdz")
     map_units = config.size // 64
+    remove_stale_export_outputs(config, status)
     if config.mode == "Random procedural":
         bounds = synthetic_bounds()
     else:
         bounds = config.selection_bounds or resolve_bounds(config.location, config.area_km, status)
+    status(
+        9,
+        "Export bounds: "
+        f"{bounds['west']:.6f},{bounds['south']:.6f} to {bounds['east']:.6f},{bounds['north']:.6f} "
+        f"({distance_km((bounds['north'] + bounds['south']) / 2, bounds['west'], (bounds['north'] + bounds['south']) / 2, bounds['east']):.2f}x"
+        f"{distance_km(bounds['south'], (bounds['east'] + bounds['west']) / 2, bounds['north'], (bounds['east'] + bounds['west']) / 2):.2f} km).",
+    )
 
     with tempfile.TemporaryDirectory(prefix="bar-native-export-") as tmp:
         root = Path(tmp)
         assets = root / "assets"
         assets.mkdir()
 
+        osm_texture = None
         if config.mode == "Random procedural":
             status(15, "Creating random procedural elevation...")
             elevation = create_synthetic_elevation_grid(bounds, grid_size=48)
@@ -854,10 +1126,13 @@ def export_native_package(config: ExportConfig, status) -> None:
             elevation = load_elevation_grid(bounds, grid_size=64, status=status)
 
             status(28, "Loading OSM features with fallback...")
-            features = load_osm_features(bounds)
+            features = load_osm_features(bounds, status)
 
-        status(38, "Generating base terrain...")
-        base_height, base_texture = generate_base_maps(config, bounds, elevation, features)
+            status(34, "Loading OSM raster for playable texture...")
+            osm_texture = load_osm_raster_image(bounds, config.size, status, "Texture", max_tiles=96)
+
+        status(38, "Generating base terrain and texture from selected bounds...")
+        base_height, base_texture = generate_base_maps(config, bounds, elevation, features, osm_texture)
         config.topology_report = create_topology_validation_report(config, bounds, elevation, base_height)
 
         status(52, "Writing BAR heightmap, metalmap, grassmap and typemap...")
@@ -912,14 +1187,17 @@ def resolve_bounds(location: str, area_km: float, status):
     if not location:
         raise ValueError("OSM place is required.")
     status(5, f"Resolving location: {location}")
+    status(5, "Nominatim: sending place search request...")
     response = requests.get(
         "https://nominatim.openstreetmap.org/search",
         params={"q": location, "format": "jsonv2", "limit": 1},
         headers={"User-Agent": "BAR Native Map Generator"},
         timeout=20,
     )
+    status(6, f"Nominatim: HTTP {response.status_code}; parsing response...")
     response.raise_for_status()
     results = response.json()
+    status(7, f"Nominatim: received {len(results)} result(s).")
     if not results:
         raise ValueError(f"Location not found: {location}")
     lat = float(results[0]["lat"])
@@ -927,6 +1205,7 @@ def resolve_bounds(location: str, area_km: float, status):
     half = max(0.2, area_km / 2)
     lat_delta = half / 111.32
     lon_delta = half / (111.32 * max(0.2, math.cos(math.radians(lat))))
+    status(8, f"Resolved center {lat:.6f}, {lon:.6f}; selected area {area_km:.2f}x{area_km:.2f} km.")
     return {
         "south": lat - lat_delta,
         "west": lon - lon_delta,
@@ -950,17 +1229,44 @@ def load_elevation_grid(bounds, grid_size: int, status):
     values: list[float] = []
     fallback_reason = None
     try:
-        for i in range(0, len(points), 50):
-            batch = points[i : i + 50]
-            response = requests.get(
-                "https://api.open-meteo.com/v1/elevation",
-                params={
-                    "latitude": ",".join(f"{p[0]:.6f}" for p in batch),
-                    "longitude": ",".join(f"{p[1]:.6f}" for p in batch),
-                },
-                timeout=25,
-            )
+        total_batches = math.ceil(len(points) / OPEN_METEO_ELEVATION_BATCH_SIZE)
+        for i in range(0, len(points), OPEN_METEO_ELEVATION_BATCH_SIZE):
+            batch = points[i : i + OPEN_METEO_ELEVATION_BATCH_SIZE]
+            batch_number = i // OPEN_METEO_ELEVATION_BATCH_SIZE + 1
+            response = None
+            for attempt in range(OPEN_METEO_ELEVATION_MAX_RETRIES + 1):
+                status(
+                    15 + 10 * min(1, len(values) / len(points)),
+                    f"Open-Meteo batch {batch_number}/{total_batches}: requesting {len(batch)} elevation samples...",
+                )
+                response = requests.get(
+                    "https://api.open-meteo.com/v1/elevation",
+                    params={
+                        "latitude": ",".join(f"{p[0]:.6f}" for p in batch),
+                        "longitude": ",".join(f"{p[1]:.6f}" for p in batch),
+                    },
+                    timeout=25,
+                )
+                if response.status_code != 429:
+                    break
+                if attempt >= OPEN_METEO_ELEVATION_MAX_RETRIES:
+                    break
+                retry_after = response.headers.get("Retry-After")
+                try:
+                    wait_seconds = float(retry_after) if retry_after else OPEN_METEO_ELEVATION_BATCH_DELAY_SECONDS * (attempt + 2)
+                except ValueError:
+                    wait_seconds = OPEN_METEO_ELEVATION_BATCH_DELAY_SECONDS * (attempt + 2)
+                wait_seconds = min(30.0, max(OPEN_METEO_ELEVATION_BATCH_DELAY_SECONDS, wait_seconds))
+                status(
+                    15 + 10 * min(1, len(values) / len(points)),
+                    f"Open-Meteo rate limit hit; waiting {wait_seconds:.1f}s before retry {attempt + 1}/{OPEN_METEO_ELEVATION_MAX_RETRIES}...",
+                )
+                time.sleep(wait_seconds)
             response.raise_for_status()
+            status(
+                15 + 10 * min(1, (len(values) + len(batch)) / len(points)),
+                f"Open-Meteo batch {batch_number}/{total_batches}: HTTP {response.status_code}; parsing samples...",
+            )
             elevations = response.json().get("elevation")
             if not isinstance(elevations, list):
                 raise ValueError("Elevation response missing elevation list")
@@ -970,8 +1276,14 @@ def load_elevation_grid(bounds, grid_size: int, status):
             if len(batch_values) != len(batch):
                 raise ValueError("Elevation response contained non-numeric samples")
             values.extend(batch_values)
-            status(15 + 10 * min(1, len(values) / len(points)), f"Elevation samples: {len(values)}/{len(points)}")
-            time.sleep(0.1)
+            if len(values) < len(points):
+                status(
+                    15 + 10 * min(1, len(values) / len(points)),
+                    f"Elevation samples: {len(values)}/{len(points)}; waiting {OPEN_METEO_ELEVATION_BATCH_DELAY_SECONDS:.1f}s to avoid Open-Meteo limits...",
+                )
+                time.sleep(OPEN_METEO_ELEVATION_BATCH_DELAY_SECONDS)
+            else:
+                status(25, f"Elevation samples: {len(values)}/{len(points)}")
     except Exception as exc:
         fallback_reason = f"Open-Meteo elevation failed: {exc}"
         values = []
@@ -1059,7 +1371,7 @@ def create_elevation_cache_key(source: str, bounds, grid_width: int, grid_height
     )
 
 
-def load_osm_features(bounds):
+def load_osm_features(bounds, status=None):
     bbox = f'{bounds["south"]:.6f},{bounds["west"]:.6f},{bounds["north"]:.6f},{bounds["east"]:.6f}'
     query = f"""
         [out:json][timeout:20];
@@ -1071,17 +1383,27 @@ def load_osm_features(bounds):
         );
         out geom;
     """
-    for endpoint in OVERPASS_ENDPOINTS:
+    for idx, endpoint in enumerate(OVERPASS_ENDPOINTS, start=1):
         try:
+            if status:
+                status(28, f"Overpass {idx}/{len(OVERPASS_ENDPOINTS)}: requesting OSM features from {endpoint}...")
             response = requests.post(endpoint, data={"data": query}, timeout=30)
             if response.ok:
-                return response.json().get("elements", [])
-        except Exception:
-            pass
+                elements = response.json().get("elements", [])
+                if status:
+                    status(32, f"Overpass {idx}/{len(OVERPASS_ENDPOINTS)}: loaded {len(elements)} OSM feature(s).")
+                return elements
+            if status:
+                status(28, f"Overpass {idx}/{len(OVERPASS_ENDPOINTS)}: HTTP {response.status_code}; trying fallback.")
+        except Exception as exc:
+            if status:
+                status(28, f"Overpass {idx}/{len(OVERPASS_ENDPOINTS)} failed: {exc}; trying fallback.")
+    if status:
+        status(32, "Overpass: no endpoint returned features; continuing without OSM feature overlay.")
     return []
 
 
-def generate_base_maps(config: ExportConfig, bounds, elevation, features):
+def generate_base_maps(config: ExportConfig, bounds, elevation, features, osm_texture: Image.Image | None = None):
     size = config.size
     metadata = elevation.get("metadata") or {}
     min_el = metadata.get("min_elevation_m", min(elevation["values"]))
@@ -1097,6 +1419,7 @@ def generate_base_maps(config: ExportConfig, bounds, elevation, features):
     tex = Image.new("RGB", (size, size))
     hpx = height_img.load()
     tpx = tex.load()
+    opx = osm_texture.convert("RGB").load() if osm_texture else None
     for y in range(size):
         v = y / (size - 1)
         for x in range(size):
@@ -1111,7 +1434,7 @@ def generate_base_maps(config: ExportConfig, bounds, elevation, features):
                 h -= 10
             h = int(max(0, min(255, h)))
             hpx[x, y] = h
-            tpx[x, y] = terrain_color(h, m)
+            tpx[x, y] = blend_osm_terrain_texture(opx[x, y], h, m) if opx else terrain_color(h, m)
     height_img = height_img.filter(ImageFilter.SMOOTH_MORE)
     return height_img, tex
 
@@ -1200,6 +1523,21 @@ def terrain_color(height: int, mask):
     if mask == (255, 0, 0) or height > 160:
         return (117, 113, 105)
     return (74, 134, 82)
+
+
+def blend_osm_terrain_texture(osm_rgb, height: int, mask):
+    terrain_rgb = terrain_color(height, mask)
+    if mask in {MASK_WATER_BODY, MASK_WATERWAY}:
+        blend = 0.28
+    elif mask in {(0, 255, 255), (0, 255, 0), (255, 255, 0), (255, 0, 255), (255, 0, 0)}:
+        blend = 0.18
+    else:
+        blend = 0.08
+    shade = 0.84 + (height / 255.0) * 0.28
+    return tuple(
+        max(0, min(255, int((osm_rgb[i] * (1 - blend) + terrain_rgb[i] * blend) * shade)))
+        for i in range(3)
+    )
 
 
 def write_heightmap(base_height: Image.Image, size: int, path: Path) -> None:
@@ -1395,10 +1733,10 @@ def compile_playable_sd7(root: Path, config: ExportConfig, status) -> Path:
             str(output_smf),
         ]
         fallback_result = run_pymapconv_command(root, fallback_cmd)
-        write_pymapconv_log(log_path, full_cmd, result, fallback_cmd, fallback_result)
+        write_pymapconv_log(log_path, root, tools_dir, full_cmd, result, fallback_cmd, fallback_result)
         result = fallback_result
     else:
-        write_pymapconv_log(log_path, full_cmd, result)
+        write_pymapconv_log(log_path, root, tools_dir, full_cmd, result)
 
     combined_output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
     if combined_output:
@@ -1505,23 +1843,190 @@ def prepare_pymapconv_runtime(root: Path, tools_dir: Path) -> None:
 def write_compressonator_wrapper(tools_dir: Path) -> None:
     tools_dir.mkdir(parents=True, exist_ok=True)
     wrapper = tools_dir / "CompressonatorCLI"
+    python = shutil.which("python3") or sys.executable
     wrapper.write_text(
-        """#!/usr/bin/env bash
-set -euo pipefail
-if [ "$#" -lt 2 ]; then
-  echo "CompressonatorCLI wrapper expected input and output paths" >&2
-  exit 2
-fi
-input="${@: -2:1}"
-output="${@: -1}"
-if command -v magick >/dev/null 2>&1; then
-  magick "$input" -flip -define dds:compression=dxt1 -define dds:fast-mipmaps=false "$output"
-elif command -v convert >/dev/null 2>&1; then
-  convert "$input" -flip -define dds:compression=dxt1 -define dds:fast-mipmaps=false "$output"
-else
-  echo "ImageMagick magick/convert is required for DDS compression" >&2
-  exit 127
-fi
+        f"""#!{python}
+import math
+import shutil
+import struct
+import subprocess
+import sys
+from pathlib import Path
+
+from PIL import Image, ImageOps
+
+
+def rgb565(color):
+    r, g, b = color
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+
+
+def expand565(value):
+    r = ((value >> 11) & 0x1F) * 255 // 31
+    g = ((value >> 5) & 0x3F) * 255 // 63
+    b = (value & 0x1F) * 255 // 31
+    return (r, g, b)
+
+
+def color_distance(a, b):
+    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
+
+
+def encode_dxt1_block(pixels):
+    darkest = min(pixels, key=lambda c: c[0] * 3 + c[1] * 6 + c[2])
+    brightest = max(pixels, key=lambda c: c[0] * 3 + c[1] * 6 + c[2])
+    color0 = rgb565(brightest)
+    color1 = rgb565(darkest)
+    if color0 <= color1:
+        color0, color1 = color1, color0
+    c0 = expand565(color0)
+    c1 = expand565(color1)
+    palette = [
+        c0,
+        c1,
+        tuple((2 * c0[i] + c1[i]) // 3 for i in range(3)),
+        tuple((c0[i] + 2 * c1[i]) // 3 for i in range(3)),
+    ]
+    indices = 0
+    for idx, pixel in enumerate(pixels):
+        best = min(range(4), key=lambda palette_idx: color_distance(pixel, palette[palette_idx]))
+        indices |= best << (2 * idx)
+    return struct.pack("<HHI", color0, color1, indices)
+
+
+def encode_dxt1_image(image):
+    image = image.convert("RGB")
+    width, height = image.size
+    data = bytearray()
+    pixels = image.load()
+    for block_y in range(0, height, 4):
+        for block_x in range(0, width, 4):
+            block = []
+            for y in range(4):
+                sample_y = min(block_y + y, height - 1)
+                for x in range(4):
+                    sample_x = min(block_x + x, width - 1)
+                    block.append(pixels[sample_x, sample_y])
+            data.extend(encode_dxt1_block(block))
+    return bytes(data)
+
+
+def dds_header(width, height, mipmaps):
+    flags = 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000
+    if mipmaps > 1:
+        flags |= 0x20000
+    linear_size = max(1, ((width + 3) // 4) * ((height + 3) // 4) * 8)
+    fourcc = int.from_bytes(b"DXT1", "little")
+    caps = 0x1000
+    if mipmaps > 1:
+        caps |= 0x8 | 0x400000
+    values = [
+        124, flags, height, width, linear_size, 0, mipmaps,
+        *([0] * 11),
+        32, 0x4, fourcc, 0, 0, 0, 0, 0,
+        caps, 0, 0, 0, 0,
+    ]
+    return b"DDS " + struct.pack("<31I", *values)
+
+
+def expected_dxt1_data_size(width, height, mipmaps):
+    total = 0
+    current_width = width
+    current_height = height
+    for _ in range(max(1, mipmaps)):
+        total += ((current_width + 3) // 4) * ((current_height + 3) // 4) * 8
+        if current_width == 1 and current_height == 1:
+            break
+        current_width = max(1, current_width // 2)
+        current_height = max(1, current_height // 2)
+    return total
+
+
+def dds_output_is_usable(output_path, width, height, mipmaps):
+    if not output_path.exists():
+        return False
+    expected = 128 + expected_dxt1_data_size(width, height, mipmaps)
+    return output_path.stat().st_size >= expected
+
+
+def write_fallback_dds(input_path, output_path, mipmaps):
+    image = Image.open(input_path)
+    image = ImageOps.flip(image.convert("RGB"))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    levels = []
+    current = image
+    for _ in range(max(1, mipmaps)):
+        levels.append(encode_dxt1_image(current))
+        if current.size == (1, 1):
+            break
+        next_size = (max(1, current.width // 2), max(1, current.height // 2))
+        current = current.resize(next_size, Image.Resampling.BILINEAR)
+    with output_path.open("wb") as handle:
+        handle.write(dds_header(image.width, image.height, len(levels)))
+        for level in levels:
+            handle.write(level)
+
+
+def parse_mipmaps(args):
+    for index, arg in enumerate(args[:-1]):
+        if arg.lower() == "-miplevels":
+            try:
+                return int(args[index + 1])
+            except ValueError:
+                return 1
+    return 1
+
+
+def run_imagemagick(args, input_path, output_path, mipmaps):
+    source = Image.open(input_path)
+    width, height = source.size
+    for tool in ("magick", "convert"):
+        executable = shutil.which(tool)
+        if not executable:
+            continue
+        cmd = [
+            executable,
+            str(input_path),
+            "-flip",
+            "-define",
+            "dds:compression=dxt1",
+            "-define",
+            "dds:fast-mipmaps=false",
+            str(output_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if dds_output_is_usable(output_path, width, height, mipmaps):
+            return True
+        message = "\\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
+        actual = output_path.stat().st_size if output_path.exists() else 0
+        expected = 128 + expected_dxt1_data_size(width, height, mipmaps)
+        print(f"{{tool}} DDS conversion failed or wrote unusable output ({{actual}} < {{expected}} bytes): {{message}}", file=sys.stderr)
+    return False
+
+
+def main():
+    args = sys.argv[1:]
+    if len(args) < 2:
+        print("CompressonatorCLI wrapper expected input and output paths", file=sys.stderr)
+        return 2
+    input_path = Path(args[-2])
+    output_path = Path(args[-1])
+    mipmaps = parse_mipmaps(args)
+    if not input_path.exists():
+        print(f"Input file does not exist: {{input_path}}", file=sys.stderr)
+        return 2
+    if run_imagemagick(args, input_path, output_path, mipmaps):
+        return 0
+    print(f"Using built-in DXT1 fallback for {{input_path}} -> {{output_path}}", file=sys.stderr)
+    write_fallback_dds(input_path, output_path, mipmaps)
+    if not output_path.exists() or output_path.stat().st_size <= 128:
+        print(f"DDS output was not created: {{output_path}}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 """,
         encoding="utf-8",
     )
@@ -1552,14 +2057,101 @@ def is_texture_compression_failure(output: str) -> bool:
         "temp/thread",
         "nvdxt.exe",
         "CompressonatorCLI",
+        "ImageMagick",
+        "magick",
+        "convert",
         "rl_completion_rewrite_hook",
         "FileNotFoundError",
     )
     return any(pattern in output for pattern in patterns)
 
 
+def summarize_pymapconv_log(text: str) -> str:
+    lines = [line.rstrip() for line in text.splitlines()]
+    interesting = []
+    lower_keywords = (
+        "error",
+        "failed",
+        "traceback",
+        "exception",
+        "imagemagick",
+        "magick",
+        "convert",
+        "compressonator",
+        "dds",
+        "exit code",
+        "not found",
+        "no such file",
+        "permission denied",
+    )
+    for line in lines:
+        folded = line.lower()
+        if any(keyword in folded for keyword in lower_keywords):
+            interesting.append(line)
+
+    hints = []
+    folded_text = text.lower()
+    if "imagemagick magick/convert is required" in folded_text or (
+        "magick: not found" in folded_text and "convert: not found" in folded_text
+    ):
+        hints.append("ImageMagick is missing from PATH. Start the GUI with ImageMagick available, for example through the documented nix-shell command.")
+    if "no decode delegate" in folded_text or "no encode delegate" in folded_text:
+        hints.append("ImageMagick is installed, but its build cannot read/write one of the requested formats.")
+    if "unable to open image" in folded_text or "no such file" in folded_text:
+        hints.append("One of the generated assets or temporary DDS files could not be opened. Check the paths shown in the log tail.")
+    if "permission denied" in folded_text:
+        hints.append("A tool or output path was not executable/writable. Check permissions on the output and temp folders.")
+    if "rl_completion_rewrite_hook" in folded_text:
+        hints.append("A bundled library leak likely broke a child shell; the exporter already strips LD_LIBRARY_PATH/LD_PRELOAD before running PyMapConv.")
+    if "compressonatorcli" in folded_text and "exit code: 1" in folded_text:
+        hints.append("Texture DDS compression failed. The exporter captures the ImageMagick wrapper output below.")
+
+    sections = []
+    if interesting:
+        sections.append("Detected PyMapConv/ImageMagick error lines:\n" + "\n".join(interesting[-24:]))
+    if hints:
+        sections.append("Likely cause hints:\n" + "\n".join(f"- {hint}" for hint in hints))
+    return "\n".join(sections)
+
+
+def collect_pymapconv_diagnostics(root: Path, tools_dir: Path) -> str:
+    env = os.environ.copy()
+    env["PATH"] = f"{tools_dir}:{env.get('PATH', '')}"
+    env.pop("LD_LIBRARY_PATH", None)
+    env.pop("LD_PRELOAD", None)
+    checks = []
+    for tool in ("python3", "magick", "convert", "CompressonatorCLI"):
+        path = shutil.which(tool, path=env.get("PATH"))
+        checks.append(f"{tool}: {path or 'not found'}")
+
+    version_cmds = (
+        ("magick", "-version"),
+        ("convert", "-version"),
+    )
+    for tool, flag in version_cmds:
+        if not shutil.which(tool, path=env.get("PATH")):
+            continue
+        try:
+            result = subprocess.run(
+                [tool, flag],
+                cwd=root,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
+            first_line = output.splitlines()[0] if output else "no version output"
+            checks.append(f"{tool} {flag}: exit {result.returncode}; {first_line}")
+        except Exception as exc:
+            checks.append(f"{tool} {flag}: failed to run: {exc}")
+    return "\n".join(checks)
+
+
 def write_pymapconv_log(
     log_path: Path,
+    root: Path,
+    tools_dir: Path,
     cmd: list[str],
     result: subprocess.CompletedProcess[str],
     fallback_cmd: list[str] | None = None,
@@ -1570,6 +2162,9 @@ def write_pymapconv_log(
         "BAR Native Map Generator - PyMapConv log",
         f"Command: {' '.join(cmd)}",
         f"Exit code: {result.returncode}",
+        "",
+        "Tool diagnostics:",
+        collect_pymapconv_diagnostics(root, tools_dir),
         "",
         "STDOUT:",
         result.stdout or "",

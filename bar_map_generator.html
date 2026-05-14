@@ -1069,6 +1069,9 @@
             fillOpacity: 0.14,
             dashArray: '6, 4'
         };
+        const OSM_SELECTION_BASE_SIZE = 512;
+        const OSM_SELECTION_BASE_WIDTH_KM = 2.2;
+        const OSM_SELECTION_BASE_HEIGHT_KM = 1.5;
 
         function switchMode(mode) {
             document.querySelectorAll('.mode-tab').forEach(tab => tab.classList.remove('active'));
@@ -1135,6 +1138,8 @@
                     searchOsmLocation();
                 }
             });
+
+            document.getElementById('osmMapSize').addEventListener('change', resizeOsmSelectionToMapSize);
         }
 
         async function searchOsmLocation() {
@@ -1188,15 +1193,43 @@
             }
         }
 
+        function getSelectedOsmMapSize() {
+            const value = parseInt(document.getElementById('osmMapSize').value, 10);
+            return Number.isFinite(value) ? value : OSM_SELECTION_BASE_SIZE;
+        }
+
+        function getOsmSelectionFootprintKm(mapSize = getSelectedOsmMapSize()) {
+            const scale = Math.max(0.25, mapSize / OSM_SELECTION_BASE_SIZE);
+            return {
+                widthKm: OSM_SELECTION_BASE_WIDTH_KM * scale,
+                heightKm: OSM_SELECTION_BASE_HEIGHT_KM * scale
+            };
+        }
+
         function makeDefaultSelectionBounds(lat, lon) {
-            const halfHeightKm = 0.75;
-            const halfWidthKm = 1.1;
+            const footprint = getOsmSelectionFootprintKm();
+            const halfHeightKm = footprint.heightKm / 2;
+            const halfWidthKm = footprint.widthKm / 2;
             const latDelta = halfHeightKm / 111.32;
             const lngDelta = halfWidthKm / (111.32 * Math.max(0.2, Math.cos(lat * Math.PI / 180)));
             return L.latLngBounds(
                 [lat - latDelta, lon - lngDelta],
                 [lat + latDelta, lon + lngDelta]
             );
+        }
+
+        function resizeOsmSelectionToMapSize() {
+            if (!osmSelectedBounds || !osmDrawLayer) {
+                return;
+            }
+
+            const center = osmSelectedBounds.getCenter();
+            const bounds = makeDefaultSelectionBounds(center.lat, center.lng);
+            osmDrawLayer.clearLayers();
+            const rectangle = L.rectangle(bounds, OSM_SELECTION_STYLE);
+            osmDrawLayer.addLayer(rectangle);
+            osmSelectedBounds = rectangle.getBounds();
+            updateOsmSelectionDisplay();
         }
 
         function clearOsmSelection() {
@@ -1221,11 +1254,14 @@
             const north = osmSelectedBounds.getNorth();
             const east = osmSelectedBounds.getEast();
             const areaKm2 = estimateBoundsAreaKm2(osmSelectedBounds);
+            const widthKm = distanceKm((north + south) / 2, west, (north + south) / 2, east);
+            const heightKm = distanceKm(south, (west + east) / 2, north, (west + east) / 2);
+            const mapSize = getSelectedOsmMapSize();
 
             document.getElementById('osmCoords').innerHTML =
                 `S ${south.toFixed(5)}, W ${west.toFixed(5)}<br>` +
                 `N ${north.toFixed(5)}, E ${east.toFixed(5)}<br>` +
-                `Area: ${areaKm2.toFixed(2)} km²`;
+                `BAR ${mapSize}x${mapSize}: ${widthKm.toFixed(2)}x${heightKm.toFixed(2)} km (${areaKm2.toFixed(2)} km²)`;
 
             const statusClass = areaKm2 > 60 ? 'error' : areaKm2 > 25 ? 'loading' : 'success';
             const message = areaKm2 > 60
@@ -1951,7 +1987,8 @@
             return provider.fetchGrid({
                 bounds,
                 targetGridSize: options.targetGridSize || getElevationGridSize(estimateBoundsAreaKm2(bounds)),
-                maxBatchSize: options.maxBatchSize || 25,
+                maxBatchSize: options.maxBatchSize || 10,
+                batchDelayMs: options.batchDelayMs || 1700,
                 allowSyntheticFallback: options.allowSyntheticFallback !== false,
                 onProgress: options.onProgress || null
             });
@@ -1995,7 +2032,8 @@
 
             const values = [];
             const samples = [];
-            const batchSize = options.maxBatchSize || 25;
+            const batchSize = options.maxBatchSize || 10;
+            const batchDelayMs = options.batchDelayMs || 1700;
             const batchCount = Math.ceil(points.length / batchSize);
             for (let i = 0; i < points.length; i += batchSize) {
                 const batch = points.slice(i, i + batchSize);
@@ -2010,7 +2048,7 @@
                     if (!response.ok) {
                         if (options.allowSyntheticFallback) {
                             const reason = response.status === 429
-                                ? 'Open-Meteo elevation API rate limit (HTTP 429)'
+                                ? 'Open-Meteo elevation API rate limit (HTTP 429) despite throttled requests'
                                 : `Open-Meteo elevation API returned HTTP ${response.status}`;
                             updateOsmProgress(76, `${reason}. Switching to generated relief...`);
                             await wait(900);
@@ -2065,7 +2103,11 @@
                     options.onProgress(values.length, points.length, batchIndex, batchCount);
                 }
                 if (i + batchSize < points.length) {
-                    await wait(700);
+                    updateOsmProgress(
+                        18 + Math.round((values.length / points.length) * 52),
+                        `Elevation samples: ${values.length}/${points.length}. Waiting ${(batchDelayMs / 1000).toFixed(1)}s to avoid Open-Meteo rate limits...`
+                    );
+                    await wait(batchDelayMs);
                 }
             }
 
