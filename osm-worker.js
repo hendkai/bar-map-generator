@@ -11,7 +11,8 @@ self.onmessage = async function (event) {
             texture: generated.texture,
             resources: generated.resources,
             config: generated.config,
-            elevationMetadata: generated.elevationMetadata
+            elevationMetadata: generated.elevationMetadata,
+            reliefProfile: generated.reliefProfile
         }, [generated.heightmap.buffer, generated.texture.buffer]);
     } catch (error) {
         self.postMessage({ type: 'error', message: error.message });
@@ -28,14 +29,7 @@ async function buildTerrainFromOsmWorker(bounds, featureMask, elevationGrid, con
     postProgress(79, 'Rasterizing OSM landscape features...');
 
     const elevationMetadata = normalizeElevationMetadata(elevationGrid);
-    const finiteElevationValues = elevationGrid.values.filter(Number.isFinite);
-    const minElevation = Number.isFinite(elevationMetadata.minElevationMeters)
-        ? elevationMetadata.minElevationMeters
-        : Math.min(...finiteElevationValues);
-    const maxElevation = Number.isFinite(elevationMetadata.maxElevationMeters)
-        ? elevationMetadata.maxElevationMeters
-        : Math.max(...finiteElevationValues);
-    const elevationRange = Math.max(1, maxElevation - minElevation);
+    const reliefProfile = computeReliefProfile(elevationGrid, { heightScale, waterLevel });
 
     for (let y = 0; y < size; y++) {
         const v = y / (size - 1);
@@ -43,13 +37,18 @@ async function buildTerrainFromOsmWorker(bounds, featureMask, elevationGrid, con
             const u = x / (size - 1);
             const mask = sampleFeatureMask(featureMask, u, v);
             const elevation = sampleElevation(elevationGrid, u, v);
-            const normalizedElevation = (elevation - minElevation) / elevationRange;
-            const localNoise = (noise2D(x * 0.018, y * 0.018) * 7) + (noise2D(x * 0.055, y * 0.055) * 2);
-            let height = 72 + normalizedElevation * 150 * heightScale + localNoise;
+            const normalizedElevation = Math.max(0, Math.min(1, (elevation - reliefProfile.elevationMinMeters) / Math.max(1, reliefProfile.elevationSpanMeters)));
+            const localNoise = (noise2D(x * 0.018, y * 0.018) * reliefProfile.detailNoise) + (noise2D(x * 0.055, y * 0.055) * 1.5);
+            let height = reliefProfile.heightmapBase + normalizedElevation * reliefProfile.heightmapRange + localNoise;
 
-            if (mask.water > 0) height = Math.min(height, waterLevel - 14 - mask.water * 12);
-            if (mask.road > 0) height = height * 0.92 + 78 * 0.08;
-            if (mask.urban > 0) height = height * 0.86 + 82 * 0.14;
+            if (mask.waterway > 0) {
+                height = Math.max(0, height - reliefProfile.waterwayCarveDepth * mask.waterway);
+            } else if (mask.water > 0) {
+                const waterPlane = reliefProfile.waterLevel - reliefProfile.waterBodyCarveDepth * mask.water;
+                height = height * 0.72 + Math.min(height, waterPlane) * 0.28;
+            }
+            if (mask.road > 0) height = height * 0.96 + (reliefProfile.heightmapBase + 10) * 0.04;
+            if (mask.urban > 0) height = height * 0.92 + (reliefProfile.heightmapBase + 12) * 0.08;
             if (mask.rock > 0) height += 18 * mask.rock;
 
             heightmap[y * size + x] = Math.max(0, Math.min(255, height));
@@ -59,9 +58,19 @@ async function buildTerrainFromOsmWorker(bounds, featureMask, elevationGrid, con
         }
     }
 
-    for (let i = 0; i < 2; i++) {
-        postProgress(88 + i, `Smoothing terrain pass ${i + 1}/2...`);
-        smoothHeightmap(heightmap, size);
+    const amplitudeBeforeSmoothing = measureAmplitude(heightmap);
+    for (let i = 0; i < reliefProfile.smoothingPasses; i++) {
+        postProgress(88 + i, `Smoothing terrain pass ${i + 1}/${reliefProfile.smoothingPasses}...`);
+        smoothHeightmapAdaptive(heightmap, size, reliefProfile.slopePreservation);
+    }
+    const targetReliefAmplitude = getAmplitudePreservationTarget(amplitudeBeforeSmoothing, reliefProfile);
+    preserveAmplitude(heightmap, targetReliefAmplitude, reliefProfile.minAmplitudePreservation);
+    if (reliefProfile.waterBodyCarveDepth > 0) {
+        applyWaterBodyPlane(heightmap, featureMask, size, reliefProfile);
+        preserveAmplitudeOutsideWater(heightmap, featureMask, size, targetReliefAmplitude, reliefProfile.minAmplitudePreservation);
+    }
+    if (reliefProfile.waterwayCarveDepth > 0) {
+        applyShallowWaterCarving(heightmap, featureMask, size, reliefProfile);
     }
 
     for (let y = 0; y < size; y++) {
@@ -114,7 +123,12 @@ async function buildTerrainFromOsmWorker(bounds, featureMask, elevationGrid, con
             terrainType: 'osm',
             playerCount,
             noiseStrength: 0,
-            heightVariation: 180,
+            heightVariation: reliefProfile.compileHeightRange,
+            compileMinHeight: reliefProfile.compileMinHeight,
+            compileMaxHeight: reliefProfile.compileMaxHeight,
+            elevationSpanMeters: reliefProfile.elevationSpanMeters,
+            reliefSource: reliefProfile.source,
+            reliefProfile,
             waterLevel,
             metalSpots,
             metalStrength,
@@ -123,8 +137,188 @@ async function buildTerrainFromOsmWorker(bounds, featureMask, elevationGrid, con
             osmBounds: bounds,
             elevationMetadata
         },
-        elevationMetadata
+        elevationMetadata,
+        reliefProfile
     };
+}
+
+function computeReliefProfile(elevationGrid, options = {}) {
+    const metadata = normalizeElevationMetadata(elevationGrid);
+    const finiteValues = (elevationGrid.values || []).filter(Number.isFinite);
+    const minElevation = Number.isFinite(metadata.minElevationMeters)
+        ? metadata.minElevationMeters
+        : (finiteValues.length ? Math.min(...finiteValues) : 0);
+    const maxElevation = Number.isFinite(metadata.maxElevationMeters)
+        ? metadata.maxElevationMeters
+        : (finiteValues.length ? Math.max(...finiteValues) : minElevation);
+    const span = Math.max(0, maxElevation - minElevation);
+    const heightScale = Number.isFinite(options.heightScale) ? Math.max(0.25, Math.min(8, options.heightScale)) : 1;
+    const realSource = !metadata.synthetic && metadata.source === 'open-meteo';
+    const source = realSource ? 'real' : (metadata.synthetic ? 'synthetic' : 'fallback');
+    const compileHeightRange = realSource
+        ? Math.max(220, Math.min(1400, Math.max(1, span) * heightScale))
+        : Math.max(180, Math.min(520, Math.max(1, span) * Math.min(heightScale, 2.5)));
+    const heightmapRange = realSource
+        ? Math.max(120, Math.min(218, 90 + Math.sqrt(Math.max(1, span)) * 5.2 * Math.min(heightScale, 3)))
+        : Math.max(92, Math.min(180, 80 + Math.sqrt(Math.max(1, span)) * 4));
+    const maxResolution = Math.max(metadata.estimatedResolutionMetersX || 0, metadata.estimatedResolutionMetersY || 0);
+    const coarse = maxResolution > 700 || (metadata.gridWidth || 0) < 32;
+    const smoothingPasses = realSource ? (coarse ? 1 : 0) : 2;
+
+    return {
+        source,
+        elevationMinMeters: minElevation,
+        elevationMaxMeters: maxElevation,
+        elevationSpanMeters: span,
+        heightmapBase: 24,
+        heightmapRange,
+        heightScale,
+        compileMinHeight: -Math.max(25, compileHeightRange * 0.08),
+        compileMaxHeight: compileHeightRange,
+        compileHeightRange,
+        smoothingPasses,
+        slopePreservation: realSource ? 0.82 : 0.65,
+        minAmplitudePreservation: realSource ? 0.88 : 0.72,
+        waterLevel: options.waterLevel || 58,
+        waterBodyCarveDepth: realSource ? 12 : 18,
+        waterwayCarveDepth: realSource ? 6 : 10,
+        detailNoise: realSource ? 3 : 6
+    };
+}
+
+function measureAmplitude(data) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const value of data) {
+        if (!Number.isFinite(value)) continue;
+        min = Math.min(min, value);
+        max = Math.max(max, value);
+    }
+    return Number.isFinite(min) && Number.isFinite(max) ? max - min : 0;
+}
+
+function preserveAmplitude(data, beforeAmplitude, minPreservation) {
+    if (beforeAmplitude <= 0) return;
+    const afterAmplitude = measureAmplitude(data);
+    const target = beforeAmplitude * minPreservation;
+    if (afterAmplitude >= target || afterAmplitude <= 0) return;
+    let sum = 0;
+    for (const value of data) sum += value;
+    const mean = sum / data.length;
+    const scale = target / afterAmplitude;
+    for (let i = 0; i < data.length; i++) {
+        data[i] = Math.max(0, Math.min(255, mean + (data[i] - mean) * scale));
+    }
+}
+
+function getAmplitudePreservationTarget(amplitudeBeforeSmoothing, reliefProfile) {
+    if (reliefProfile.source !== 'real') {
+        return amplitudeBeforeSmoothing;
+    }
+
+    const span = Math.max(0, reliefProfile.elevationSpanMeters || 0);
+    if (span < 8) {
+        return amplitudeBeforeSmoothing;
+    }
+
+    if (span < 35) {
+        const spanWeight = span / 35;
+        return Math.max(amplitudeBeforeSmoothing, reliefProfile.heightmapRange * spanWeight);
+    }
+
+    return Math.max(amplitudeBeforeSmoothing, reliefProfile.heightmapRange);
+}
+
+function preserveAmplitudeOutsideWater(data, featureMask, size, beforeAmplitude, minPreservation) {
+    if (beforeAmplitude <= 0) return;
+    const targetAmplitude = beforeAmplitude * minPreservation;
+    const currentAmplitude = measureAmplitude(data);
+    if (currentAmplitude >= targetAmplitude || currentAmplitude <= 0) return;
+
+    let globalMin = Infinity;
+    let landMin = Infinity;
+    let landMax = -Infinity;
+    for (let y = 0; y < size; y++) {
+        const v = y / (size - 1);
+        for (let x = 0; x < size; x++) {
+            const u = x / (size - 1);
+            const i = y * size + x;
+            const value = data[i];
+            if (!Number.isFinite(value)) continue;
+            globalMin = Math.min(globalMin, value);
+            const mask = sampleFeatureMask(featureMask, u, v);
+            if (mask.water > 0) continue;
+            landMin = Math.min(landMin, value);
+            landMax = Math.max(landMax, value);
+        }
+    }
+    if (!Number.isFinite(globalMin) || !Number.isFinite(landMin) || !Number.isFinite(landMax) || landMax <= landMin) return;
+
+    const desiredLandMax = Math.min(255, globalMin + targetAmplitude);
+    if (landMax >= desiredLandMax) return;
+
+    const scale = (desiredLandMax - landMin) / (landMax - landMin);
+    for (let y = 0; y < size; y++) {
+        const v = y / (size - 1);
+        for (let x = 0; x < size; x++) {
+            const u = x / (size - 1);
+            const mask = sampleFeatureMask(featureMask, u, v);
+            if (mask.water > 0) continue;
+            const i = y * size + x;
+            data[i] = Math.max(0, Math.min(255, landMin + (data[i] - landMin) * scale));
+        }
+    }
+}
+
+function smoothHeightmapAdaptive(data, size, slopePreservation) {
+    const source = new Float32Array(data);
+    for (let y = 1; y < size - 1; y++) {
+        for (let x = 1; x < size - 1; x++) {
+            const i = y * size + x;
+            const center = source[i];
+            const average = (
+                source[i - 1] + source[i + 1] +
+                source[i - size] + source[i + size] +
+                center * 4
+            ) / 8;
+            const localSlope = Math.max(
+                Math.abs(source[i - 1] - source[i + 1]),
+                Math.abs(source[i - size] - source[i + size])
+            );
+            const blend = localSlope > 10 ? 1 - slopePreservation : 0.35;
+            data[i] = center * (1 - blend) + average * blend;
+        }
+    }
+}
+
+function applyShallowWaterCarving(heightmap, featureMask, size, reliefProfile) {
+    for (let y = 0; y < size; y++) {
+        const v = y / (size - 1);
+        for (let x = 0; x < size; x++) {
+            const u = x / (size - 1);
+            const mask = sampleFeatureMask(featureMask, u, v);
+            if (mask.waterway <= 0) continue;
+            const i = y * size + x;
+            const target = Math.max(0, reliefProfile.waterLevel - reliefProfile.waterwayCarveDepth);
+            if (heightmap[i] > target) {
+                heightmap[i] = Math.max(target, heightmap[i] - reliefProfile.waterwayCarveDepth * 0.45);
+            }
+        }
+    }
+}
+
+function applyWaterBodyPlane(heightmap, featureMask, size, reliefProfile) {
+    for (let y = 0; y < size; y++) {
+        const v = y / (size - 1);
+        for (let x = 0; x < size; x++) {
+            const u = x / (size - 1);
+            const mask = sampleFeatureMask(featureMask, u, v);
+            if (mask.water <= 0) continue;
+            const i = y * size + x;
+            const waterPlane = Math.max(0, reliefProfile.waterLevel - reliefProfile.waterBodyCarveDepth * mask.water);
+            heightmap[i] = Math.min(heightmap[i], waterPlane);
+        }
+    }
 }
 
 function normalizeElevationMetadata(elevationGrid) {
@@ -168,6 +362,7 @@ function sampleFeatureMask(mask, u, v) {
         rock: r > 200 && g < 80 && b < 80 ? 1 : 0,
         forest: g > 180 && r < 80 && b < 80 ? 1 : 0,
         water: b > 180 && r < 80 && g < 80 ? 1 : 0,
+        waterway: b > 180 && r < 80 && g >= 80 && g < 180 ? 1 : 0,
         road: g > 180 && b > 180 && r < 80 ? 1 : 0,
         sand: r > 180 && b > 180 && g < 80 ? 1 : 0,
         field: r > 180 && g > 180 && b < 80 ? 1 : 0,

@@ -1273,6 +1273,9 @@
                 if (generated.elevationMetadata) {
                     mapConfig.elevationMetadata = generated.elevationMetadata;
                 }
+                if (generated.reliefProfile) {
+                    mapConfig.reliefProfile = generated.reliefProfile;
+                }
 
                 await paintOsmProgress(97, 'Drawing previews...');
                 drawOsmPreview(generated.featureMask);
@@ -1282,7 +1285,7 @@
 
                 await paintOsmProgress(100, 'Done');
                 setOsmStatus(
-                    `OSM map generated. ${formatElevationGridStatus(elevationGrid)} OSM elements: ${osmFeatures.elements.length}.${osmFeatures.fallback ? ' Overpass rejected feature data, using elevation-only terrain fallback.' : ''}`,
+                    `OSM map generated. ${formatElevationGridStatus(elevationGrid, mapConfig.reliefProfile)} OSM elements: ${osmFeatures.elements.length}.${osmFeatures.fallback ? ' Overpass rejected feature data, using elevation-only terrain fallback.' : ''}`,
                     'success'
                 );
                 setTimeout(hideOsmProgress, 2500);
@@ -1572,9 +1575,10 @@
         }
 
         function getElevationGridSize(areaKm2) {
-            if (areaKm2 > 45) return 10;
-            if (areaKm2 > 20) return 14;
-            return 18;
+            if (areaKm2 > 80) return 24;
+            if (areaKm2 > 45) return 32;
+            if (areaKm2 > 20) return 48;
+            return 64;
         }
 
         function wait(ms) {
@@ -1671,7 +1675,7 @@
             ].join(':');
         }
 
-        function formatElevationGridStatus(elevationGrid) {
+        function formatElevationGridStatus(elevationGrid, reliefProfile = null) {
             const metadata = elevationGrid.metadata || {};
             const sourceLabel = metadata.synthetic
                 ? `${metadata.providerName || 'Synthetic fallback'} (${metadata.source || 'synthetic-fallback'})`
@@ -1682,7 +1686,10 @@
             const resX = Number.isFinite(metadata.estimatedResolutionMetersX) ? metadata.estimatedResolutionMetersX.toFixed(0) : 'n/a';
             const resY = Number.isFinite(metadata.estimatedResolutionMetersY) ? metadata.estimatedResolutionMetersY.toFixed(0) : 'n/a';
             const fallback = metadata.synthetic && metadata.fallbackReason ? ` Fallback reason: ${metadata.fallbackReason}.` : '';
-            return `Elevation source: ${sourceLabel}. Grid: ${gridLabel}, samples: ${metadata.sampleCount || elevationGrid.values.length}, min/max: ${min}/${max} m, approx. resolution: ${resX}x${resY} m.${fallback}`;
+            const relief = reliefProfile
+                ? ` Relief: ${reliefProfile.source}, span ${reliefProfile.elevationSpanMeters.toFixed(1)} m, BAR height ${reliefProfile.compileMinHeight.toFixed(1)}..${reliefProfile.compileMaxHeight.toFixed(1)}.`
+                : '';
+            return `Elevation source: ${sourceLabel}. Grid: ${gridLabel}, samples: ${metadata.sampleCount || elevationGrid.values.length}, min/max: ${min}/${max} m, approx. resolution: ${resX}x${resY} m.${relief}${fallback}`;
         }
 
         async function buildTerrainFromOsm(bounds, osmFeatures, elevationGrid, onProgress = null) {
@@ -1832,7 +1839,7 @@
         }
 
         function getOsmFeatureCategory(tags) {
-            if (tags.waterway) return { kind: 'line', color: 'rgba(0,0,255,255)', width: 6 };
+            if (tags.waterway) return { kind: 'line', color: 'rgba(0,128,255,255)', width: 6 };
             if (tags.natural === 'water' || tags.natural === 'wetland') return { kind: 'area', color: 'rgba(0,0,255,255)' };
             if (tags.natural === 'wood' || tags.landuse === 'forest') return { kind: 'area', color: 'rgba(0,255,0,255)' };
             if (['grass', 'meadow', 'farmland'].includes(tags.landuse)) return { kind: 'area', color: 'rgba(255,255,0,255)' };
@@ -1857,6 +1864,7 @@
                 rock: r > 200 && g < 80 && b < 80 ? 1 : 0,
                 forest: g > 180 && r < 80 && b < 80 ? 1 : 0,
                 water: b > 180 && r < 80 && g < 80 ? 1 : 0,
+                waterway: b > 180 && r < 80 && g >= 80 && g < 180 ? 1 : 0,
                 road: g > 180 && b > 180 && r < 80 ? 1 : 0,
                 sand: r > 180 && b > 180 && g < 80 ? 1 : 0,
                 field: r > 180 && g > 180 && b < 80 ? 1 : 0,
@@ -3468,6 +3476,9 @@
         }
 
         function generatePythonBuildScript(mapName) {
+            const compileMinHeight = Number.isFinite(mapConfig?.compileMinHeight) ? mapConfig.compileMinHeight : null;
+            const compileMaxHeight = Number.isFinite(mapConfig?.compileMaxHeight) ? mapConfig.compileMaxHeight : null;
+            const hasCompileBounds = compileMinHeight !== null && compileMaxHeight !== null;
             return `#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -3496,6 +3507,8 @@ MAP_CONTAINER_DIR = os.path.join(BUILD_DIR, MAP_NAME + ".sdd")
 COMPILED_MAPS_DIR = os.path.join(MAP_CONTAINER_DIR, "maps")
 FINAL_SD7_PATH = os.path.join(OUTPUT_DIR, MAP_NAME + ".sd7")
 COMPILED_SMF_PATH = os.path.join(COMPILED_MAPS_DIR, MAP_NAME + ".smf")
+COMPILE_MIN_HEIGHT = ${hasCompileBounds ? compileMinHeight.toFixed(2) : 'None'}
+COMPILE_MAX_HEIGHT = ${hasCompileBounds ? compileMaxHeight.toFixed(2) : 'None'}
 
 # PyMapConv URLs (Beherith's modern map compiler)
 PYMAPCONV_URLS = {
@@ -3996,6 +4009,16 @@ def compiled_outputs_exist():
     print(f"✅ SMT gefunden: {smt_path}")
     return True
 
+def add_height_bounds(cmd):
+    """Add BAR world height bounds from the generated relief metadata."""
+    if COMPILE_MIN_HEIGHT is None or COMPILE_MAX_HEIGHT is None:
+        return cmd
+    args = ["-x", f"{COMPILE_MAX_HEIGHT:.2f}", "-n", f"{COMPILE_MIN_HEIGHT:.2f}"]
+    if "-o" in cmd:
+        index = cmd.index("-o")
+        return cmd[:index] + args + cmd[index:]
+    return cmd + args
+
 def package_sd7():
     """Pack the compiled .sdd container into a BAR-loadable .sd7 archive"""
     print("📦 Packe finale .sd7 Map...")
@@ -4136,6 +4159,8 @@ def run_pymapconv(pymapconv_path):
             "-o", output_path
         ]
     
+    cmd = add_height_bounds(cmd)
+
     try:
         print(f"🔧 Kommando: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -4253,6 +4278,8 @@ def run_pymapconv_python(pymapconv_path):
         "-o", output_path                                 # output
     ]
     
+    cmd = add_height_bounds(cmd)
+
     try:
         print(f"🔧 Python-Kommando: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -4307,6 +4334,8 @@ def run_pymapconv_simple(pymapconv_path):
             "-o", output_path
         ]
     
+    cmd = add_height_bounds(cmd)
+
     try:
         print(f"🔧 Vereinfachtes Kommando: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -5917,9 +5946,11 @@ https://github.com/beyond-all-reason/bar-map-generator
             const toSpringX = x => Math.round(x * worldSize / config.size);
             const toSpringZ = y => Math.round(y * worldSize / config.size);
 
-            const maxHeight = config.heightVariation;
-            const minHeight = Math.round(-maxHeight * 0.3);
-            const waterLevel = (config.waterLevel / 255 * maxHeight).toFixed(1);
+            const hasCompileBounds = Number.isFinite(config.compileMinHeight) && Number.isFinite(config.compileMaxHeight);
+            const maxHeight = hasCompileBounds ? config.compileMaxHeight : config.heightVariation;
+            const minHeight = hasCompileBounds ? config.compileMinHeight : Math.round(-maxHeight * 0.3);
+            const heightRange = maxHeight - minHeight;
+            const waterLevel = (minHeight + (config.waterLevel / 255 * heightRange)).toFixed(1);
 
             const teamsBlock = config.startPositions.map((pos, i) =>
                 `        [${i}] = { startpos = { x = ${toSpringX(pos.x)}, z = ${toSpringZ(pos.y)} } },`
