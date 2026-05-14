@@ -1,0 +1,48 @@
+[
+  {
+    "id": "zugspitze_wetterstein",
+    "label": "Zugspitze / Wetterstein relief",
+    "bounds": {
+      "south": 47.385,
+      "west": 10.92,
+      "north": 47.445,
+      "east": 11.04
+    },
+    "expected": {
+      "widthKm": 9.0,
+      "heightKm": 6.7,
+      "elevationSpanM": 2240,
+      "dominantGradient": "south",
+      "ruggedness": 22
+    },
+    "tolerance": {
+      "boundsCenterKm": 2.5,
+      "sizePct": 45,
+      "elevationSpanPct": 65,
+      "gradientScoreMin": 0.12
+    }
+  },
+  {
+    "id": "rhine_valley_loreley",
+    "label": "Rhine Valley / Loreley relief",
+    "bounds": {
+      "south": 50.125,
+      "west": 7.66,
+      "north": 50.175,
+      "east": 7.75
+    },
+    "expected": {
+      "widthKm": 6.3,
+      "heightKm": 5.6,
+      "elevationSpanM": 290,
+      "dominantGradient": "east",
+      "ruggedness": 8
+    },
+    "tolerance": {
+      "boundsCenterKm": 2.0,
+      "sizePct": 50,
+      "elevationSpanPct": 70,
+      "gradientScoreMin": 0.1
+    }
+  }
+]

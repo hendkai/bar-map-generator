@@ -12,7 +12,8 @@ self.onmessage = async function (event) {
             resources: generated.resources,
             config: generated.config,
             elevationMetadata: generated.elevationMetadata,
-            reliefProfile: generated.reliefProfile
+            reliefProfile: generated.reliefProfile,
+            topologySignature: generated.topologySignature
         }, [generated.heightmap.buffer, generated.texture.buffer]);
     } catch (error) {
         self.postMessage({ type: 'error', message: error.message });
@@ -100,6 +101,11 @@ async function buildTerrainFromOsmWorker(bounds, featureMask, elevationGrid, con
 
     postProgress(96, 'Analyzing terrain for resources...');
     const terrainAnalysis = analyzeTerrain(heightmap, size, waterLevel);
+    const topologySignature = computeTopologySignature(heightmap, size, size, {
+        stage: 'heightmapPreview',
+        waterLevel,
+        source: reliefProfile.source
+    });
 
     postProgress(97, 'Placing metal and geothermal spots...');
     const resources = generateResourceMap(
@@ -138,8 +144,113 @@ async function buildTerrainFromOsmWorker(bounds, featureMask, elevationGrid, con
             elevationMetadata
         },
         elevationMetadata,
-        reliefProfile
+        reliefProfile,
+        topologySignature
     };
+}
+
+function computeTopologySignature(data, width, height, options = {}) {
+    const sampleStepX = Math.max(1, Math.floor(width / 96));
+    const sampleStepY = Math.max(1, Math.floor(height / 96));
+    let minHeight = Infinity;
+    let maxHeight = -Infinity;
+    let sum = 0;
+    let count = 0;
+    const sampled = [];
+    for (let y = 0; y < height; y += sampleStepY) {
+        for (let x = 0; x < width; x += sampleStepX) {
+            const value = Number(data[y * width + x]);
+            if (!Number.isFinite(value)) continue;
+            minHeight = Math.min(minHeight, value);
+            maxHeight = Math.max(maxHeight, value);
+            sum += value;
+            count++;
+            sampled.push({ x, y, value });
+        }
+    }
+    if (!count) {
+        minHeight = 0;
+        maxHeight = 0;
+    }
+    const meanHeight = count ? sum / count : 0;
+    let variance = 0;
+    sampled.forEach(sample => {
+        variance += (sample.value - meanHeight) ** 2;
+    });
+    let ruggedSum = 0;
+    let ruggedCount = 0;
+    for (let y = sampleStepY; y < height; y += sampleStepY) {
+        for (let x = sampleStepX; x < width; x += sampleStepX) {
+            const value = Number(data[y * width + x]);
+            const left = Number(data[y * width + x - sampleStepX]);
+            const up = Number(data[(y - sampleStepY) * width + x]);
+            if (Number.isFinite(value) && Number.isFinite(left)) {
+                ruggedSum += Math.abs(value - left);
+                ruggedCount++;
+            }
+            if (Number.isFinite(value) && Number.isFinite(up)) {
+                ruggedSum += Math.abs(value - up);
+                ruggedCount++;
+            }
+        }
+    }
+    const profiles = sampleHeightProfileLines(data, width, height, 17);
+    const westMean = averageProfileSlice(profiles.profileWestEast, 0, 0.35);
+    const eastMean = averageProfileSlice(profiles.profileWestEast, 0.65, 1);
+    const northMean = averageProfileSlice(profiles.profileNorthSouth, 0, 0.35);
+    const southMean = averageProfileSlice(profiles.profileNorthSouth, 0.65, 1);
+    const eastDelta = eastMean - westMean;
+    const southDelta = southMean - northMean;
+    const heightSpan = Math.max(0, maxHeight - minHeight);
+    const threshold = Math.max(3, heightSpan * 0.08);
+    let dominantGradient = 'mixed';
+    if (Math.abs(eastDelta) > Math.abs(southDelta) && Math.abs(eastDelta) >= threshold) {
+        dominantGradient = eastDelta > 0 ? 'east' : 'west';
+    } else if (Math.abs(southDelta) >= threshold) {
+        dominantGradient = southDelta > 0 ? 'south' : 'north';
+    }
+    return {
+        stage: options.stage || 'heightmapPreview',
+        width,
+        height,
+        minHeight,
+        maxHeight,
+        heightSpan,
+        meanHeight,
+        stdDevHeight: count ? Math.sqrt(variance / count) : 0,
+        ruggedness: ruggedCount ? ruggedSum / ruggedCount : 0,
+        dominantGradient,
+        gradientScore: heightSpan > 0 ? Math.max(Math.abs(eastDelta), Math.abs(southDelta)) / heightSpan : 0,
+        profileNorthSouth: profiles.profileNorthSouth,
+        profileWestEast: profiles.profileWestEast,
+        waterCoveragePct: Number.isFinite(options.waterLevel)
+            ? sampled.filter(sample => sample.value <= options.waterLevel).length / Math.max(1, sampled.length) * 100
+            : undefined,
+        source: options.source || null
+    };
+}
+
+function sampleHeightProfileLines(data, width, height, points) {
+    const centerX = Math.floor(width / 2);
+    const centerY = Math.floor(height / 2);
+    const profileNorthSouth = [];
+    const profileWestEast = [];
+    for (let i = 0; i < points; i++) {
+        const t = points <= 1 ? 0 : i / (points - 1);
+        const x = Math.max(0, Math.min(width - 1, Math.round(t * (width - 1))));
+        const y = Math.max(0, Math.min(height - 1, Math.round(t * (height - 1))));
+        profileWestEast.push(Number(data[centerY * width + x]) || 0);
+        profileNorthSouth.push(Number(data[y * width + centerX]) || 0);
+    }
+    return { profileNorthSouth, profileWestEast };
+}
+
+function averageProfileSlice(profile, startRatio, endRatio) {
+    if (!profile.length) return 0;
+    const start = Math.max(0, Math.floor(profile.length * startRatio));
+    const end = Math.max(start + 1, Math.ceil(profile.length * endRatio));
+    const slice = profile.slice(start, end);
+    return slice.reduce((sum, value) => sum + value, 0) / slice.length;
 }
 
 function computeReliefProfile(elevationGrid, options = {}) {

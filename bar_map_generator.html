@@ -701,6 +701,11 @@
             border-left: 2px solid #ff4c4c;
         }
 
+        .osm-status.warning {
+            color: #ffd166;
+            border-left: 2px solid #ffd166;
+        }
+
         .osm-status small {
             display: block;
             color: #777;
@@ -744,6 +749,35 @@
             max-width: 100%;
             height: auto;
             border-radius: 4px;
+        }
+
+        .topology-panel {
+            margin: 14px 0;
+            padding: 12px;
+            border-radius: 4px;
+            background: rgba(0,0,0,0.18);
+            border: 1px solid rgba(255,255,255,0.06);
+            font-size: 0.78rem;
+            line-height: 1.5;
+        }
+
+        .topology-panel strong {
+            color: #84c8ee;
+            display: block;
+            font-family: 'Exo 2', sans-serif;
+            font-size: 0.76rem;
+            letter-spacing: 0.08em;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .topology-panel.pass { border-left: 3px solid #4fff4a; }
+        .topology-panel.warning { border-left: 3px solid #ffd166; }
+        .topology-panel.fail { border-left: 3px solid #ff4c4c; }
+
+        .topology-panel ul {
+            margin: 6px 0 0;
+            padding-left: 18px;
         }
 
         @media (max-width: 900px) {
@@ -957,7 +991,19 @@
                         </select>
                     </label>
 
+                    <label>Reference Region:
+                        <select id="topologyReferenceSelect" onchange="updateOsmSelectionDisplay()">
+                            <option value="">No topology reference</option>
+                            <option value="zugspitze_wetterstein">Zugspitze / Wetterstein relief</option>
+                            <option value="rhine_valley_loreley">Rhine Valley / Loreley relief</option>
+                        </select>
+                    </label>
+
                     <div id="osmCoords" class="osm-coords">Draw a rectangle on the map.</div>
+                    <div id="topologyValidationPanel" class="topology-panel warning">
+                        <strong>Topology Validation</strong>
+                        Select a reference region to compare the red OSM bounds, preview heightmap and export assets.
+                    </div>
                     <div id="osmStatus" class="osm-status">
                         Area limit: keep the selected region reasonably small for the public APIs.
                         <small>Uses OSM/Overpass landscape data and Open-Meteo elevation samples.</small>
@@ -1013,6 +1059,7 @@
         let osmDrawLayer = null;
         let osmSelectedBounds = null;
         let osmWorker = null;
+        let latestTopologyValidationReport = null;
         const OSM_MASK_SIZE = 512;
         const OSM_SELECTION_STYLE = {
             color: '#ff3b30',
@@ -1033,6 +1080,7 @@
             if (activeTab) activeTab.classList.add('active');
 
             if (mode === 'osm') {
+                loadTopologyReferenceCatalog();
                 initOsmMap();
                 setTimeout(() => osmMap && osmMap.invalidateSize(), 50);
             }
@@ -1154,10 +1202,15 @@
         function clearOsmSelection() {
             if (osmDrawLayer) osmDrawLayer.clearLayers();
             osmSelectedBounds = null;
+            latestTopologyValidationReport = null;
             document.getElementById('osmCoords').textContent = 'Draw a rectangle on the map.';
             setOsmStatus('Area cleared.', '');
             hideOsmProgress();
             clearCanvas('osmPreviewCanvas');
+            clearCanvas('osmHeightmapCanvas');
+            clearCanvas('osmTextureCanvas');
+            clearCanvas('osmResourceCanvas');
+            updateTopologySelectionPreview(null);
         }
 
         function updateOsmSelectionDisplay() {
@@ -1179,6 +1232,7 @@
                 ? 'Selection is quite large. Try a smaller area for the first pass.'
                 : 'Selection ready.';
             setOsmStatus(message, statusClass);
+            updateTopologySelectionPreview(boundsToPlainObject(osmSelectedBounds));
         }
 
         function setOsmStatus(message, className = '') {
@@ -1276,6 +1330,20 @@
                 if (generated.reliefProfile) {
                     mapConfig.reliefProfile = generated.reliefProfile;
                 }
+                mapConfig.osmBounds = boundsToPlainObject(osmSelectedBounds);
+                const barExportSignature = computeTopologySignatureFromCanvas(generateBARHeightmap(), {
+                    stage: 'barExport',
+                    waterLevel: mapConfig.waterLevel,
+                    source: 'browser-bar-heightmap'
+                });
+                latestTopologyValidationReport = createTopologyValidationReport({
+                    mapName: `generated_osm_${mapConfig.size}x${mapConfig.size}`,
+                    bounds: mapConfig.osmBounds,
+                    elevationGrid,
+                    workerSignature: generated.topologySignature,
+                    barExportSignature
+                });
+                displayTopologyValidationReport(latestTopologyValidationReport);
 
                 await paintOsmProgress(97, 'Drawing previews...');
                 drawOsmPreview(generated.featureMask);
@@ -1377,6 +1445,447 @@
                 north: bounds.getNorth(),
                 east: bounds.getEast()
             };
+        }
+
+        const TOPOLOGY_REFERENCE_CATALOG_URL = 'topology_reference_regions.json';
+        const TOPOLOGY_REFERENCE_REGIONS_FALLBACK = [
+            {
+                id: "zugspitze_wetterstein",
+                label: "Zugspitze / Wetterstein relief",
+                bounds: { south: 47.385, west: 10.92, north: 47.445, east: 11.04 },
+                expected: {
+                    widthKm: 9.0,
+                    heightKm: 6.7,
+                    elevationSpanM: 2240,
+                    dominantGradient: "south",
+                    ruggedness: 22
+                },
+                tolerance: {
+                    boundsCenterKm: 2.5,
+                    sizePct: 45,
+                    elevationSpanPct: 65,
+                    gradientScoreMin: 0.12
+                }
+            },
+            {
+                id: "rhine_valley_loreley",
+                label: "Rhine Valley / Loreley relief",
+                bounds: { south: 50.125, west: 7.66, north: 50.175, east: 7.75 },
+                expected: {
+                    widthKm: 6.3,
+                    heightKm: 5.6,
+                    elevationSpanM: 290,
+                    dominantGradient: "east",
+                    ruggedness: 8
+                },
+                tolerance: {
+                    boundsCenterKm: 2.0,
+                    sizePct: 50,
+                    elevationSpanPct: 70,
+                    gradientScoreMin: 0.1
+                }
+            }
+        ];
+        let topologyReferenceRegions = TOPOLOGY_REFERENCE_REGIONS_FALLBACK;
+        let topologyReferenceCatalogLoad = null;
+
+        function getTopologyReferenceRegions() {
+            return topologyReferenceRegions;
+        }
+
+        async function loadTopologyReferenceCatalog() {
+            if (topologyReferenceCatalogLoad) return topologyReferenceCatalogLoad;
+            if (typeof fetch === 'undefined') return topologyReferenceRegions;
+            topologyReferenceCatalogLoad = fetch(TOPOLOGY_REFERENCE_CATALOG_URL)
+                .then(response => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
+                .then(catalog => {
+                    if (Array.isArray(catalog)) {
+                        topologyReferenceRegions = catalog;
+                        populateTopologyReferenceSelect(catalog);
+                        updateOsmSelectionDisplay();
+                    }
+                    return topologyReferenceRegions;
+                })
+                .catch(error => {
+                    console.warn('Using embedded topology reference fallback:', error);
+                    populateTopologyReferenceSelect(topologyReferenceRegions);
+                    return topologyReferenceRegions;
+                });
+            return topologyReferenceCatalogLoad;
+        }
+
+        function populateTopologyReferenceSelect(regions = getTopologyReferenceRegions()) {
+            if (typeof document === 'undefined') return;
+            const select = document.getElementById('topologyReferenceSelect');
+            if (!select) return;
+            const current = select.value;
+            select.innerHTML = '<option value="">No topology reference</option>';
+            regions.forEach(region => {
+                const option = document.createElement('option');
+                option.value = region.id;
+                option.textContent = region.label;
+                select.appendChild(option);
+            });
+            if (regions.some(region => region.id === current)) {
+                select.value = current;
+            }
+        }
+
+        function getSelectedTopologyReference() {
+            const select = typeof document !== 'undefined' ? document.getElementById('topologyReferenceSelect') : null;
+            const selectedId = select ? select.value : '';
+            return getTopologyReferenceRegions().find(region => region.id === selectedId) || null;
+        }
+
+        function computeBoundsSignature(bounds) {
+            if (!bounds) return null;
+            const widthKm = distanceKm((bounds.north + bounds.south) / 2, bounds.west, (bounds.north + bounds.south) / 2, bounds.east);
+            const heightKm = distanceKm(bounds.south, (bounds.east + bounds.west) / 2, bounds.north, (bounds.east + bounds.west) / 2);
+            return {
+                stage: 'selection',
+                bounds,
+                widthKm,
+                heightKm,
+                centerLat: (bounds.north + bounds.south) / 2,
+                centerLon: (bounds.east + bounds.west) / 2
+            };
+        }
+
+        function distanceKm(lat1, lon1, lat2, lon2) {
+            const radiusKm = 6371;
+            const phi1 = lat1 * Math.PI / 180;
+            const phi2 = lat2 * Math.PI / 180;
+            const dPhi = (lat2 - lat1) * Math.PI / 180;
+            const dLambda = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) ** 2;
+            return 2 * radiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+        }
+
+        function computeTopologySignature(input, width, height, options = {}) {
+            const data = ArrayBuffer.isView(input) || Array.isArray(input) ? input : (input && input.values) || [];
+            const gridWidth = width || (input && (input.gridWidth || input.gridSize)) || Math.sqrt(data.length);
+            const gridHeight = height || (input && (input.gridHeight || input.gridSize)) || gridWidth;
+            const sampleStepX = Math.max(1, Math.floor(gridWidth / 96));
+            const sampleStepY = Math.max(1, Math.floor(gridHeight / 96));
+            let minHeight = Infinity;
+            let maxHeight = -Infinity;
+            let sum = 0;
+            let count = 0;
+            const sampled = [];
+            for (let y = 0; y < gridHeight; y += sampleStepY) {
+                for (let x = 0; x < gridWidth; x += sampleStepX) {
+                    const value = Number(data[Math.min(data.length - 1, y * gridWidth + x)]);
+                    if (!Number.isFinite(value)) continue;
+                    minHeight = Math.min(minHeight, value);
+                    maxHeight = Math.max(maxHeight, value);
+                    sum += value;
+                    count++;
+                    sampled.push({ x, y, value });
+                }
+            }
+            if (!count) {
+                minHeight = 0;
+                maxHeight = 0;
+            }
+            const meanHeight = count ? sum / count : 0;
+            let variance = 0;
+            sampled.forEach(sample => {
+                variance += (sample.value - meanHeight) ** 2;
+            });
+            const stdDevHeight = count ? Math.sqrt(variance / count) : 0;
+            let ruggedSum = 0;
+            let ruggedCount = 0;
+            for (let y = sampleStepY; y < gridHeight; y += sampleStepY) {
+                for (let x = sampleStepX; x < gridWidth; x += sampleStepX) {
+                    const i = y * gridWidth + x;
+                    const value = Number(data[i]);
+                    const left = Number(data[y * gridWidth + x - sampleStepX]);
+                    const up = Number(data[(y - sampleStepY) * gridWidth + x]);
+                    if (Number.isFinite(value) && Number.isFinite(left)) {
+                        ruggedSum += Math.abs(value - left);
+                        ruggedCount++;
+                    }
+                    if (Number.isFinite(value) && Number.isFinite(up)) {
+                        ruggedSum += Math.abs(value - up);
+                        ruggedCount++;
+                    }
+                }
+            }
+            const profiles = sampleHeightProfileLines(data, gridWidth, gridHeight, 17);
+            const westMean = averageProfileSlice(profiles.profileWestEast, 0, 0.35);
+            const eastMean = averageProfileSlice(profiles.profileWestEast, 0.65, 1);
+            const northMean = averageProfileSlice(profiles.profileNorthSouth, 0, 0.35);
+            const southMean = averageProfileSlice(profiles.profileNorthSouth, 0.65, 1);
+            const eastDelta = eastMean - westMean;
+            const southDelta = southMean - northMean;
+            const heightSpan = Math.max(0, maxHeight - minHeight);
+            const threshold = Math.max(3, heightSpan * 0.08);
+            let dominantGradient = 'mixed';
+            if (Math.abs(eastDelta) > Math.abs(southDelta) && Math.abs(eastDelta) >= threshold) {
+                dominantGradient = eastDelta > 0 ? 'east' : 'west';
+            } else if (Math.abs(southDelta) >= threshold) {
+                dominantGradient = southDelta > 0 ? 'south' : 'north';
+            }
+            return {
+                stage: options.stage || 'heightmapPreview',
+                width: gridWidth,
+                height: gridHeight,
+                minHeight,
+                maxHeight,
+                heightSpan,
+                meanHeight,
+                stdDevHeight,
+                ruggedness: ruggedCount ? ruggedSum / ruggedCount : 0,
+                dominantGradient,
+                gradientScore: heightSpan > 0 ? Math.max(Math.abs(eastDelta), Math.abs(southDelta)) / heightSpan : 0,
+                profileNorthSouth: profiles.profileNorthSouth,
+                profileWestEast: profiles.profileWestEast,
+                waterCoveragePct: Number.isFinite(options.waterLevel)
+                    ? sampled.filter(sample => sample.value <= options.waterLevel).length / Math.max(1, sampled.length) * 100
+                    : undefined,
+                source: options.source || null
+            };
+        }
+
+        function computeTopologySignatureFromCanvas(canvas, options = {}) {
+            if (!canvas || typeof canvas.getContext !== 'function') {
+                return computeTopologySignature([], 0, 0, options);
+            }
+            const context = canvas.getContext('2d');
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height).data;
+            const values = new Float32Array(canvas.width * canvas.height);
+            for (let i = 0, j = 0; i < imageData.length; i += 4, j++) {
+                values[j] = (imageData[i] + imageData[i + 1] + imageData[i + 2]) / 3;
+            }
+            return computeTopologySignature(values, canvas.width, canvas.height, options);
+        }
+
+        function refreshTopologyValidationReport({ mapName, bounds, elevationGrid = null, workerSignature = null, barAssets = null } = {}) {
+            if (!heightmapData || !mapConfig || mapConfig.terrainType !== 'osm') {
+                latestTopologyValidationReport = null;
+                return null;
+            }
+            const previousReport = latestTopologyValidationReport;
+            const previousSourceSignature = previousReport && previousReport.signatures
+                ? previousReport.signatures.find(signature => signature.stage === 'sourceElevation')
+                : null;
+            const exportHeightmap = barAssets && barAssets.heightmap ? barAssets.heightmap : generateBARHeightmap();
+            const barExportSignature = computeTopologySignatureFromCanvas(exportHeightmap, {
+                stage: 'barExport',
+                waterLevel: mapConfig.waterLevel,
+                source: 'browser-bar-heightmap'
+            });
+            latestTopologyValidationReport = createTopologyValidationReport({
+                mapName: mapName || (previousReport && previousReport.mapName) || `generated_osm_${mapConfig.size}x${mapConfig.size}`,
+                bounds: bounds || mapConfig.osmBounds || (mapConfig.elevationMetadata && mapConfig.elevationMetadata.bounds) || null,
+                elevationGrid,
+                workerSignature,
+                barExportSignature,
+                sourceElevationSignature: elevationGrid ? null : previousSourceSignature,
+                previousElevationMetadata: previousReport ? previousReport.elevationMetadata : null
+            });
+            return latestTopologyValidationReport;
+        }
+
+        function sampleHeightProfileLines(data, width, height, points = 17) {
+            const centerX = Math.floor(width / 2);
+            const centerY = Math.floor(height / 2);
+            const profileNorthSouth = [];
+            const profileWestEast = [];
+            for (let i = 0; i < points; i++) {
+                const t = points <= 1 ? 0 : i / (points - 1);
+                const x = Math.max(0, Math.min(width - 1, Math.round(t * (width - 1))));
+                const y = Math.max(0, Math.min(height - 1, Math.round(t * (height - 1))));
+                profileWestEast.push(Number(data[centerY * width + x]) || 0);
+                profileNorthSouth.push(Number(data[y * width + centerX]) || 0);
+            }
+            return { profileNorthSouth, profileWestEast };
+        }
+
+        function averageProfileSlice(profile, startRatio, endRatio) {
+            if (!profile.length) return 0;
+            const start = Math.max(0, Math.floor(profile.length * startRatio));
+            const end = Math.max(start + 1, Math.ceil(profile.length * endRatio));
+            const slice = profile.slice(start, end);
+            return slice.reduce((sum, value) => sum + value, 0) / slice.length;
+        }
+
+        function compareTopologySignature(reference, signatures, boundsSignature, options = {}) {
+            const issues = [];
+            if (!reference) {
+                return issues;
+            }
+            const tolerance = reference.tolerance || {};
+            if (boundsSignature) {
+                const refBounds = computeBoundsSignature(reference.bounds);
+                const centerDistance = distanceKm(boundsSignature.centerLat, boundsSignature.centerLon, refBounds.centerLat, refBounds.centerLon);
+                const widthDeltaPct = Math.abs(boundsSignature.widthKm - reference.expected.widthKm) / Math.max(0.001, reference.expected.widthKm) * 100;
+                const heightDeltaPct = Math.abs(boundsSignature.heightKm - reference.expected.heightKm) / Math.max(0.001, reference.expected.heightKm) * 100;
+                if (centerDistance > (tolerance.boundsCenterKm || 2)) {
+                    issues.push({
+                        severity: 'error',
+                        code: 'bounds-mismatch',
+                        message: `Selection center is ${centerDistance.toFixed(2)} km from reference center.`,
+                        expected: `${tolerance.boundsCenterKm || 2} km`,
+                        actual: `${centerDistance.toFixed(2)} km`
+                    });
+                }
+                if (widthDeltaPct > (tolerance.sizePct || 35) || heightDeltaPct > (tolerance.sizePct || 35)) {
+                    issues.push({
+                        severity: 'warning',
+                        code: 'scale-mismatch',
+                        message: `Selection footprint differs from reference size (${widthDeltaPct.toFixed(0)}% width, ${heightDeltaPct.toFixed(0)}% height).`,
+                        expected: `${reference.expected.widthKm.toFixed(1)}x${reference.expected.heightKm.toFixed(1)} km`,
+                        actual: `${boundsSignature.widthKm.toFixed(1)}x${boundsSignature.heightKm.toFixed(1)} km`
+                    });
+                }
+            }
+            const source = signatures.find(signature => signature.stage === 'sourceElevation');
+            const preview = signatures.find(signature => signature.stage === 'heightmapPreview');
+            const barExport = signatures.find(signature => signature.stage === 'barExport');
+            if (source) {
+                const spanDeltaPct = Math.abs(source.heightSpan - reference.expected.elevationSpanM) / Math.max(1, reference.expected.elevationSpanM) * 100;
+                if (source.heightSpan < reference.expected.elevationSpanM * (1 - (tolerance.elevationSpanPct || 60) / 100)) {
+                    issues.push({
+                        severity: 'error',
+                        code: 'relief-too-flat',
+                        message: `Source elevation span is lower than the reference relief.`,
+                        expected: `${reference.expected.elevationSpanM.toFixed(0)} m`,
+                        actual: `${source.heightSpan.toFixed(1)} m`
+                    });
+                } else if (spanDeltaPct > (tolerance.elevationSpanPct || 60)) {
+                    issues.push({
+                        severity: 'warning',
+                        code: 'relief-too-steep',
+                        message: `Source elevation span differs from reference relief.`,
+                        expected: `${reference.expected.elevationSpanM.toFixed(0)} m`,
+                        actual: `${source.heightSpan.toFixed(1)} m`
+                    });
+                }
+                if (reference.expected.dominantGradient !== 'mixed' && source.dominantGradient !== reference.expected.dominantGradient && source.gradientScore >= (tolerance.gradientScoreMin || 0.1)) {
+                    issues.push({
+                        severity: 'warning',
+                        code: 'gradient-mismatch',
+                        message: `Dominant source gradient does not match the reference.`,
+                        expected: reference.expected.dominantGradient,
+                        actual: source.dominantGradient
+                    });
+                }
+            }
+            if (preview && preview.heightSpan < Math.max(8, reference.expected.ruggedness * 1.2)) {
+                issues.push({
+                    severity: 'error',
+                    code: 'relief-too-flat',
+                    message: `Preview heightmap span is too flat for the selected reference.`,
+                    expected: `>${Math.max(8, reference.expected.ruggedness * 1.2).toFixed(1)}`,
+                    actual: preview.heightSpan.toFixed(1)
+                });
+            }
+            if (barExport && preview) {
+                const spanRatio = barExport.heightSpan / Math.max(1, preview.heightSpan);
+                if (spanRatio < 0.72 || spanRatio > 1.28 || (barExport.dominantGradient !== preview.dominantGradient && preview.dominantGradient !== 'mixed')) {
+                    issues.push({
+                        severity: 'error',
+                        code: 'preview-export-divergence',
+                        message: `BAR export topology diverges from preview heightmap.`,
+                        expected: `${preview.heightSpan.toFixed(1)} span / ${preview.dominantGradient}`,
+                        actual: `${barExport.heightSpan.toFixed(1)} span / ${barExport.dominantGradient}`
+                    });
+                }
+            }
+            if (options.reliefProfile && Number.isFinite(options.compileMinHeight) && Number.isFinite(options.compileMaxHeight)) {
+                const expectedMin = options.reliefProfile.compileMinHeight;
+                const expectedMax = options.reliefProfile.compileMaxHeight;
+                if (Number.isFinite(expectedMin) && Number.isFinite(expectedMax) &&
+                    (Math.abs(expectedMin - options.compileMinHeight) > 0.1 || Math.abs(expectedMax - options.compileMaxHeight) > 0.1)) {
+                    issues.push({
+                        severity: 'error',
+                        code: 'export-height-bounds-mismatch',
+                        message: `Export compile height bounds do not match the relief profile.`,
+                        expected: `${expectedMin.toFixed(2)}..${expectedMax.toFixed(2)}`,
+                        actual: `${options.compileMinHeight.toFixed(2)}..${options.compileMaxHeight.toFixed(2)}`
+                    });
+                }
+            }
+            return issues;
+        }
+
+        function createTopologyValidationReport({ mapName, bounds, elevationGrid, workerSignature, barExportSignature, sourceElevationSignature = null, previousElevationMetadata = null }) {
+            const reference = getSelectedTopologyReference();
+            const boundsSignature = computeBoundsSignature(bounds);
+            const signatures = [];
+            if (boundsSignature) signatures.push(boundsSignature);
+            if (elevationGrid && elevationGrid.values) {
+                signatures.push(computeTopologySignature(elevationGrid.values, elevationGrid.gridWidth || elevationGrid.gridSize, elevationGrid.gridHeight || elevationGrid.gridSize, {
+                    stage: 'sourceElevation',
+                    source: (elevationGrid.metadata && elevationGrid.metadata.source) || 'unknown'
+                }));
+            } else if (sourceElevationSignature) {
+                signatures.push(Object.assign({}, sourceElevationSignature, { stage: 'sourceElevation' }));
+            }
+            const previewSignature = workerSignature || computeTopologySignature(heightmapData, mapConfig.size, mapConfig.size, {
+                stage: 'heightmapPreview',
+                waterLevel: mapConfig.waterLevel,
+                source: mapConfig.reliefSource || 'generated'
+            });
+            signatures.push(Object.assign({}, previewSignature, { stage: 'heightmapPreview' }));
+            if (barExportSignature) signatures.push(Object.assign({}, barExportSignature, { stage: 'barExport' }));
+            const issues = compareTopologySignature(reference, signatures, boundsSignature, {
+                reliefProfile: mapConfig.reliefProfile,
+                compileMinHeight: mapConfig.compileMinHeight,
+                compileMaxHeight: mapConfig.compileMaxHeight
+            });
+            const status = issues.some(issue => issue.severity === 'error') ? 'fail' : issues.length ? 'warning' : 'pass';
+            return {
+                generatedAt: new Date().toISOString(),
+                referenceRegionId: reference ? reference.id : null,
+                referenceRegionLabel: reference ? reference.label : null,
+                mapName,
+                mapSize: mapConfig.size,
+                bounds,
+                elevationMetadata: elevationGrid ? elevationGrid.metadata : (mapConfig.elevationMetadata || previousElevationMetadata || null),
+                reliefProfile: mapConfig.reliefProfile || null,
+                compileMinHeight: mapConfig.compileMinHeight,
+                compileMaxHeight: mapConfig.compileMaxHeight,
+                signatures,
+                issues,
+                status
+            };
+        }
+
+        function updateTopologySelectionPreview(bounds) {
+            const reference = getSelectedTopologyReference();
+            const panel = document.getElementById('topologyValidationPanel');
+            if (!panel) return;
+            if (!reference) {
+                panel.className = 'topology-panel warning';
+                panel.innerHTML = '<strong>Topology Validation</strong>Select a reference region to compare the red OSM bounds, preview heightmap and export assets.';
+                return;
+            }
+            const boundsSignature = computeBoundsSignature(bounds);
+            const issues = compareTopologySignature(reference, [], boundsSignature);
+            const status = issues.some(issue => issue.severity === 'error') ? 'fail' : issues.length ? 'warning' : 'pass';
+            panel.className = `topology-panel ${status}`;
+            const sizeLine = boundsSignature ? `${boundsSignature.widthKm.toFixed(1)}x${boundsSignature.heightKm.toFixed(1)} km` : 'No selection';
+            panel.innerHTML = `<strong>Topology Validation</strong>${reference.label}: ${status.toUpperCase()}<br>Selection footprint: ${sizeLine}${renderTopologyIssuesList(issues)}`;
+        }
+
+        function renderTopologyIssuesList(issues) {
+            if (!issues || !issues.length) return '';
+            return `<ul>${issues.slice(0, 4).map(issue => `<li>${issue.code}: ${issue.actual}</li>`).join('')}</ul>`;
+        }
+
+        function displayTopologyValidationReport(report) {
+            const panel = document.getElementById('topologyValidationPanel');
+            if (!panel || !report) return;
+            panel.className = `topology-panel ${report.status}`;
+            const source = report.signatures.find(signature => signature.stage === 'sourceElevation');
+            const preview = report.signatures.find(signature => signature.stage === 'heightmapPreview');
+            const barExport = report.signatures.find(signature => signature.stage === 'barExport');
+            const sourceLine = source ? `Source span ${source.heightSpan.toFixed(1)} m, gradient ${source.dominantGradient}` : 'Source elevation not available';
+            const previewLine = preview ? `Preview span ${preview.heightSpan.toFixed(1)}, ruggedness ${preview.ruggedness.toFixed(1)}` : 'Preview not available';
+            const exportLine = barExport ? `Export span ${barExport.heightSpan.toFixed(1)}, gradient ${barExport.dominantGradient}` : 'Export not generated yet';
+            panel.innerHTML = `<strong>Topology Validation</strong>${report.referenceRegionLabel || 'No reference'}: ${report.status.toUpperCase()}<br>${sourceLine}<br>${previewLine}<br>${exportLine}${renderTopologyIssuesList(report.issues)}`;
         }
 
         function buildTerrainFromOsmInWorker(bounds, featureMask, elevationGrid) {
@@ -2013,6 +2522,7 @@
 
         function generateMap() {
             console.log("=== Generiere Map-Vorschau (Web Worker) ===");
+            latestTopologyValidationReport = null;
 
             const size = parseInt(document.getElementById('mapSize').value);
             const terrainType = document.getElementById('terrainType').value;
@@ -5179,6 +5689,14 @@ https://github.com/beyond-all-reason/bar-map-generator
             // Build summary
             const passCount = results.filter(r => r.pass).length;
             const failCount = results.length - passCount;
+            let topologyReport = null;
+            if (heightmapData && mapConfig && mapConfig.terrainType === 'osm') {
+                topologyReport = refreshTopologyValidationReport({
+                    mapName: latestTopologyValidationReport ? latestTopologyValidationReport.mapName : `generated_${mapConfig.terrainType}_${mapConfig.size}x${mapConfig.size}`,
+                    barAssets
+                });
+                if (topologyReport.status === 'fail') allPass = false;
+            }
             const summary = allPass
                 ? `✓ All ${results.length} assets validated successfully`
                 : `Validation complete: ${passCount} passed, ${failCount} failed`;
@@ -5187,6 +5705,7 @@ https://github.com/beyond-all-reason/bar-map-generator
                 allPass,
                 results,
                 summary,
+                topologyReport,
                 timestamp: new Date().toISOString()
             };
         }
@@ -5344,6 +5863,10 @@ https://github.com/beyond-all-reason/bar-map-generator
                     </a>
                 `;
                 validationItemsDiv.appendChild(docLinkDiv);
+            }
+
+            if (report.topologyReport) {
+                displayTopologyValidationReport(report.topologyReport);
             }
 
             // Show the validation results section
@@ -5793,6 +6316,15 @@ https://github.com/beyond-all-reason/bar-map-generator
             assetsFolder.file("splatmap.png", splatmapBlob);
 
             // Add package metadata
+            const topologyReport = refreshTopologyValidationReport({
+                mapName,
+                bounds: mapConfig.osmBounds || (mapConfig.elevationMetadata && mapConfig.elevationMetadata.bounds) || null,
+                barAssets: assets
+            });
+            if (topologyReport) {
+                zip.file("topology_validation.json", JSON.stringify(topologyReport, null, 2));
+                zip.file("topology_validation_summary.txt", generateTopologyValidationSummary(topologyReport));
+            }
             zip.file("VERSION", "1.0\nGenerated by BAR Map Generator");
             zip.file("INSTALL.txt", generateInstallInstructions(mapName));
 
@@ -5808,6 +6340,26 @@ https://github.com/beyond-all-reason/bar-map-generator
 
             console.log("Complete package generated successfully, size:", zipBlob.size, "bytes");
             return zipBlob;
+        }
+
+        function generateTopologyValidationSummary(report) {
+            if (!report) return 'Topology validation report was not available.\n';
+            const lines = [
+                `Topology validation: ${report.status}`,
+                `Reference: ${report.referenceRegionLabel || 'none'}`,
+                `Map: ${report.mapName} (${report.mapSize})`,
+                `Compile height bounds: ${report.compileMinHeight}..${report.compileMaxHeight}`,
+                '',
+                'Issues:'
+            ];
+            if (!report.issues.length) {
+                lines.push('- none');
+            } else {
+                report.issues.forEach(issue => {
+                    lines.push(`- ${issue.severity} ${issue.code}: ${issue.message} expected=${issue.expected} actual=${issue.actual}`);
+                });
+            }
+            return `${lines.join('\n')}\n`;
         }
 
         function generateInstallInstructions(mapName) {

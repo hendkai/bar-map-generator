@@ -44,7 +44,11 @@ function loadBrowserElevationFunctions(fetchImpl) {
             createElevationGrid,
             formatElevationGridStatus,
             createElevationCacheKey,
-            getElevationGridSize
+            getElevationGridSize,
+            computeTopologySignature,
+            compareTopologySignature,
+            computeBoundsSignature,
+            getTopologyReferenceRegions
         };
     `, sandbox, { filename: 'bar_map_generator.html:elevation' });
     return { api: sandbox.__exports, progress };
@@ -78,7 +82,8 @@ function loadWorkerFunctions() {
             normalizeElevationMetadata,
             sampleElevation,
             computeReliefProfile,
-            measureAmplitude
+            measureAmplitude,
+            computeTopologySignature
         };
     `, sandbox, { filename: 'osm-worker.js' });
     return { api: sandbox.__exports, messages, worker: sandbox.self };
@@ -239,6 +244,59 @@ async function testWorkerUsesElevationAndPassesMetadata() {
     const complete = messages.find(message => message.type === 'complete');
     assert(complete.reliefProfile);
     assert.strictEqual(complete.reliefProfile.source, 'real');
+    assert(complete.topologySignature);
+    assert.strictEqual(complete.topologySignature.stage, 'heightmapPreview');
+    assert(complete.topologySignature.heightSpan > 0);
+}
+
+function testTopologySignaturesAndReferenceComparison() {
+    const { api } = loadBrowserElevationFunctions(async () => {
+        throw new Error('not used');
+    });
+    const sharedCatalog = JSON.parse(fs.readFileSync('topology_reference_regions.json', 'utf8'));
+    assert.deepStrictEqual(
+        JSON.parse(JSON.stringify(api.getTopologyReferenceRegions())),
+        sharedCatalog
+    );
+    const eastGradient = Array.from({ length: 16 }, (_, i) => (i % 4) * 20);
+    const eastSignature = api.computeTopologySignature(eastGradient, 4, 4, { stage: 'heightmapPreview' });
+    assert.strictEqual(eastSignature.dominantGradient, 'east');
+    assert.strictEqual(eastSignature.heightSpan, 60);
+
+    const flatSignature = api.computeTopologySignature(new Array(16).fill(42), 4, 4, { stage: 'heightmapPreview' });
+    const reference = api.getTopologyReferenceRegions()[0];
+    const correctIssues = api.compareTopologySignature(reference, [], api.computeBoundsSignature(reference.bounds));
+    assert.strictEqual(correctIssues.length, 0);
+
+    const flatIssues = api.compareTopologySignature(
+        reference,
+        [Object.assign({}, flatSignature, { stage: 'heightmapPreview' })],
+        api.computeBoundsSignature(reference.bounds)
+    );
+    assert(flatIssues.some(issue => issue.code === 'relief-too-flat'));
+
+    const wrongBounds = { south: 52.4, west: 13.3, north: 52.5, east: 13.5 };
+    const boundsIssues = api.compareTopologySignature(reference, [], api.computeBoundsSignature(wrongBounds));
+    assert(boundsIssues.some(issue => issue.code === 'bounds-mismatch'));
+
+    const sourceWrongGradient = Object.assign({}, eastSignature, {
+        stage: 'sourceElevation',
+        heightSpan: reference.expected.elevationSpanM,
+        dominantGradient: reference.expected.dominantGradient === 'east' ? 'west' : 'east',
+        gradientScore: 0.5
+    });
+    const gradientIssues = api.compareTopologySignature(reference, [sourceWrongGradient], api.computeBoundsSignature(reference.bounds));
+    assert(gradientIssues.some(issue => issue.code === 'gradient-mismatch'));
+
+    const exportIssues = api.compareTopologySignature(
+        reference,
+        [
+            Object.assign({}, eastSignature, { stage: 'heightmapPreview', heightSpan: 100, dominantGradient: 'east' }),
+            Object.assign({}, eastSignature, { stage: 'barExport', heightSpan: 20, dominantGradient: 'west' })
+        ],
+        api.computeBoundsSignature(reference.bounds)
+    );
+    assert(exportIssues.some(issue => issue.code === 'preview-export-divergence'));
 }
 
 async function testReliefAmplitudeAndSmallSpanCompileRange() {
@@ -383,6 +441,7 @@ function testBrowserExportHeightBounds() {
     await testReliefAmplitudeAndSmallSpanCompileRange();
     await testWaterCarvingAndReliefPreservation();
     await testHighTerrainWaterBodyPreservesGlobalRelief();
+    testTopologySignaturesAndReferenceComparison();
     testBrowserExportHeightBounds();
     console.log('elevation-pipeline-harness: all assertions passed');
 })().catch(error => {
