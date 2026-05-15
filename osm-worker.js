@@ -36,6 +36,7 @@ async function buildTerrainFromOsmWorker(bounds, featureMask, elevationGrid, con
         const v = y / (size - 1);
         for (let x = 0; x < size; x++) {
             const u = x / (size - 1);
+            // Texture/height rows stay in one row-major OSM buffer for export validation.
             const mask = sampleFeatureMask(featureMask, u, v);
             const elevation = sampleElevation(elevationGrid, u, v);
             const normalizedElevation = Math.max(0, Math.min(1, (elevation - reliefProfile.elevationMinMeters) / Math.max(1, reliefProfile.elevationSpanMeters)));

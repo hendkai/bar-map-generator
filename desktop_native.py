@@ -1143,7 +1143,10 @@ def export_native_package(config: ExportConfig, status) -> None:
 
         status(64, "Writing large texture asset natively...")
         texture_size = 512 * map_units
-        base_texture.resize((texture_size, texture_size), Image.Resampling.BILINEAR).save(assets / "texture.bmp")
+        texture_path = assets / "texture.bmp"
+        base_texture.resize((texture_size, texture_size), Image.Resampling.BILINEAR).convert("RGB").save(texture_path, "BMP")
+        # Native export validates the BMP header before the package is assembled.
+        validate_texture_bmp(texture_path, texture_size)
 
         status(76, "Writing normal, specular, minimap and splat assets...")
         Image.new("RGB", (texture_size, texture_size), (128, 128, 255)).save(assets / "normalmap.png")
@@ -1434,6 +1437,7 @@ def generate_base_maps(config: ExportConfig, bounds, elevation, features, osm_te
                 h -= 10
             h = int(max(0, min(255, h)))
             hpx[x, y] = h
+            # Texture pixels are written row-major before the RGB BMP resize/export path.
             tpx[x, y] = blend_osm_terrain_texture(opx[x, y], h, m) if opx else terrain_color(h, m)
     height_img = height_img.filter(ImageFilter.SMOOTH_MORE)
     return height_img, tex
@@ -1587,6 +1591,35 @@ def write_typemap(config: ExportConfig, height: Image.Image, path: Path) -> None
     ).convert("RGB").save(path)
 
 
+def validate_texture_bmp(path: Path, expected_size: int) -> None:
+    with path.open("rb") as f:
+        header = f.read(54)
+    if len(header) < 54:
+        raise ValueError(f"{path} is too short for a BMP header")
+    if header[:2] != b"BM":
+        raise ValueError(f"{path} is not a BMP texture")
+
+    pixel_offset = int.from_bytes(header[10:14], "little")
+    width = int.from_bytes(header[18:22], "little", signed=True)
+    height = int.from_bytes(header[22:26], "little", signed=True)
+    bits_per_pixel = int.from_bytes(header[28:30], "little")
+    abs_height = abs(height)
+    if width != expected_size or abs_height != expected_size:
+        raise ValueError(f"{path} is {width}x{abs_height}, expected {expected_size}x{expected_size}")
+    if bits_per_pixel != 24:
+        raise ValueError(f"{path} must be a 24-bit BMP, got {bits_per_pixel}-bit")
+
+    row_stride = ((width * bits_per_pixel + 31) // 32) * 4
+    min_size = pixel_offset + row_stride * abs_height
+    if path.stat().st_size < min_size:
+        raise ValueError(f"{path} is truncated ({path.stat().st_size} bytes, expected at least {min_size})")
+
+    with Image.open(path) as img:
+        img.load()
+        if img.format != "BMP" or img.size != (expected_size, expected_size):
+            raise ValueError(f"{path} failed BMP decode validation")
+
+
 def generate_mapinfo(config: ExportConfig, starts) -> str:
     def sx(x):
         return int(x * 8)
@@ -1651,6 +1684,7 @@ cfg = ExportConfig(
 )
 Path("output").mkdir(exist_ok=True)
 result = compile_playable_sd7(Path("."), cfg, lambda pct, msg: print(msg))
+# Preserve read_bytes output copy while native texture validation guards package assets.
 cfg.output.write_bytes(result.read_bytes())
 print(f"Created {{cfg.output}}")
 """

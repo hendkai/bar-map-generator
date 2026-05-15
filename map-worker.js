@@ -417,6 +417,7 @@ function generateTextureMap(size, heightmapData, waterLevel, seed) {
         const y = (i / size) | 0;
         const height = heightmapData[i];
         const idx = i * 4;
+        // Keep procedural texture rows contiguous so BMP export cannot band by chunk.
         const rel = height - waterLevel;
 
         // Color variation from noise
